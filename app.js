@@ -1,7 +1,20 @@
 const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),privacy:false,theme:'light',cache:{}};
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const n=v=>Number(String(v||0).replace(/[^0-9.-]/g,''))||0;
+
+// === REVISI TOTAL: Fungsi Pembaca Angka (Anti-Bug Titik Ribuan) ===
+const n=v=>{
+    if (typeof v === 'number') return v;
+    let str = String(v||0).trim();
+    if (!str) return 0;
+    if (str.includes(',')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+        str = str.replace(/(?<=\d)\.(?=\d{3}(?!\d))/g, '');
+    }
+    return Number(str) || 0;
+};
+
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const dateNow=()=>new Date().toISOString();
 
@@ -40,7 +53,6 @@ function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');se
 function money(x){return S.privacy?'Rp••••••':new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n(x))}
 function monthName(x){return new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric'}).format(new Date(x+'-01T00:00:00'))}
 
-// Helper f() diperbarui: type 'number' otomatis jadi text inputmode numeric & diformat
 function f(label,id,type='text',value='',full=''){
     let extra = type === 'number' ? 'type="text" inputmode="numeric"' : `type="${type}"`;
     let fmtValue = type === 'number' ? formatNum(value) : value;
@@ -54,7 +66,6 @@ function modal(title,body,save,opts={}){
     $('#modalTitle').textContent=title;
     $('#modalBody').innerHTML=body;
     
-    // Format input number yang mungkin dibuat secara custom tanpa f()
     $('#modalBody').querySelectorAll('input[type="number"]').forEach(inp => {
         let val = inp.value;
         inp.type = 'text';
@@ -146,7 +157,6 @@ function goal(id){return S.cache.goals.find(x=>x.id===id)}
 function source(id){return pocket(id)||acct(id)}
 function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 
-// --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
 
 function getGoldPrice(goldItem){
@@ -197,7 +207,6 @@ function goalValue(gid){return S.cache.goalAllocations.filter(x=>x.goalId===gid&
 function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,more:more}[S.page];$('#view').innerHTML=fn()}
 function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===S.page))}
 
-// --- HALAMAN BERANDA ---
 function home(){
     let p=plan(),ps=pstats(p),g=S.cache.goals.filter(x=>!['archived','cancelled'].includes(x.status)).sort((a,b)=>a.priority-b.priority).slice(0,3);
     let runway = getRunway();
@@ -231,7 +240,6 @@ function home(){
 function goalRow(g){let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="row"><span style="font-size:24px">${g.icon||'🎯'}</span><div class="grow"><b>${esc(g.name)}</b><div class="progress" style="margin:6px 0"><i style="width:${pc}%"></i></div><small class="muted">${money(x)} · ${pc.toFixed(1)}%</small></div></div>`}
 function planView(){let p=plan(),ps=pstats(p);return `<div class="section"><div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo rekening.</span></div><button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button></div><div class="monthbar"><button class="icon" data-action="prevMonth">‹</button><b>${monthName(S.month)}</b><button class="icon" data-action="nextMonth">›</button></div>${p?`<div class="grid four" style="margin-top:15px"><div class="card kpi"><span class="muted small">Pendapatan</span><b>${money(ps.income)}</b><button class="btn ghost" data-action="addIncome">＋ Income</button></div><div class="card kpi"><span class="muted small">Alokasi</span><b>${money(ps.alloc)}</b></div><div class="card kpi"><span class="muted small">Dana Disiapkan</span><b>${money(ps.funded)}</b></div><div class="card kpi"><span class="muted small">Sisa/Minus</span><b class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</b></div></div><div class="section"><div><h2>Daftar alokasi</h2><span class="muted">Status funded dapat hanya penanda atau transfer.</span></div><div><button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button> <button class="btn dark" data-action="closing">Tutup Bulan</button></div></div><div class="card">${items(p.id).length?items(p.id).map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">${esc(x.category)} · ${x.fundingMode==='transfer'?'Transfer saldo':'Penanda saja'}</small></div><div style="text-align:right"><b>${money(x.amount)}</b><br><button class="fund ${x.fundingStatus}" data-fund="${x.id}">${x.fundingStatus==='funded'?'Dana Disiapkan':'Direncanakan'}</button> <button class="icon" data-remove-item="${x.id}">×</button></div></div>`).join(''):'<div class="empty">Belum ada pos.</div>'}</div>`:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`}
 
-// --- HALAMAN KEKAYAAN ---
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
     <div class="tabs">
@@ -246,7 +254,6 @@ function wealth(){
 
 function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><span class="muted">Satu saldo dapat dialokasikan ke beberapa tujuan.</span></div><button class="btn primary" data-action="addGoal">＋ Tujuan</button></div><div class="grid three">${S.cache.goals.map(g=>{let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="card"><div style="display:flex;justify-content:space-between"><span style="font-size:26px">${g.icon}</span><span class="badge ${g.status==='used'?'purple':g.status==='achieved'?'green':'blue'}">${g.status}</span></div><h3>${esc(g.name)}</h3><small class="muted">Target ${money(g.target)} · Prioritas ${g.priority}</small><div class="progress" style="margin:14px 0 7px"><i style="width:${pc}%"></i></div><b>${money(x)}</b><small class="muted"> · ${pc.toFixed(1)}%</small><div style="margin-top:14px"><button class="btn ghost" data-allocate="${g.id}">Alokasikan saldo</button> <button class="btn ghost" data-goal-status="${g.id}">Status</button></div></div>`}).join('')||'<div class="card empty">Belum ada tujuan.</div>'}</div>`}
 
-// === REVISI: TAB REKENING (EDIT & HAPUS KANTONG) ===
 function accountsView(){
     return `<div class="section">
         <div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div>
@@ -442,7 +449,6 @@ function more(){
     </div>`
 }
 
-// --- HELPER CRUD ---
 async function ledger(type,label,amount,meta={},reversible=true){await FWPDB.put('ledger',{id:id('l'),type,label,amount:n(amount),meta,status:'posted',reversible,createdAt:dateNow()})}
 async function alterSource(sid,delta,label,meta={}){
     if(!sid)return;
@@ -466,7 +472,6 @@ async function alterSource(sid,delta,label,meta={}){
 
 function sourceOpts(selected=''){return [...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="${x.id}" ${selected===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
 
-// --- ONBOARDING & SETUP ---
 function showOnboarding(step){
     $('#onboarding').classList.remove('hidden');
     let q=step===1?`<div class="onboard-main"><div class="eyebrow">Langkah 1/3</div><h1>Cara mengelola anggaran?</h1><div class="choice" id="onChoice"><button data-v="simple" class="selected"><b>Ringkas</b><br><span class="muted">Rencana tanpa transaksi harian.</span></button><button data-v="closing"><b>Closing ringan</b><br><span class="muted">Isi sisa saat akhir bulan.</span></button><button data-v="detailed"><b>Lebih rinci</b><br><span class="muted">Status funded dan realisasi opsional.</span></button></div><button class="btn primary" data-on-next="2">Lanjut</button></div>`:
@@ -479,11 +484,9 @@ let ON={budgetMode:'simple',defaultClosing:'used'};
 async function seed(){
     let set=await FWPDB.get('settings','main');if(set)return;
     await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000,goldPrices:{pegadaian:0,lastSync:null},palacePrices:{'24K':0,'18K':0,'9K':0,lastSync:null}});
-    // REVISI: Kas -> Dompet
     for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Dompet'}])await FWPDB.put('institutions',x)
 }
 
-// --- FITUR CRUD MODAL ---
 async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name','text','Rencana '+monthName(S.month)),async()=>{await FWPDB.put('plans',{id:id('pl'),month:S.month,name:v('x_name'),status:'open',createdAt:dateNow()});closeModal();await refresh();toast('Rencana dibuat')})}
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
@@ -554,7 +557,6 @@ async function allocateGoal(gid){
     })
 }
 
-// === FUNGSI EDIT & HAPUS REKENING/INSTITUSI ===
 async function addInstitution(){modal('Tambah Institusi',`<div class="formgrid">${f('Nama','x_name')}${f('Jenis','x_type','text','Bank')}</div>`,async()=>{await FWPDB.put('institutions',{id:id('i'),name:v('x_name'),type:v('x_type')});closeModal();await refresh()})}
 async function editInstitution(id) {
     let inst = S.cache.institutions.find(x=>x.id===id);
@@ -603,7 +605,6 @@ async function delAccount(id) {
 async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f('Nama kantong','x_name')}${f('Alokasi saldo','x_balance','number','0')}</div><div class="info small">Kantong adalah bagian dari saldo rekening induk, bukan saldo tambahan.</div>`,async()=>{let a=acct(aid),amount=n(v('x_balance'));if(pocketAllocated(aid)+amount>n(a.balance))return toast('Total kantong melebihi saldo rekening');await FWPDB.put('pockets',{id:id('p'),accountId:aid,name:v('x_name'),balance:amount,createdAt:dateNow()});closeModal();await refresh()})}
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 
-// === FUNGSI EDIT & HAPUS KANTONG ===
 async function editPocket(pid) {
     let p = pocket(pid), a = acct(p.accountId);
     modal('Edit Kantong', `
@@ -639,7 +640,6 @@ async function delPocket(pid) {
     toast('Kantong dihapus');
 }
 
-// --- CRUD EMAS ---
 async function addGold(){
     modal('Tambah Emas', `<div class="formgrid">
         ${f('Nama / Keterangan','x_name','text','Cincin Emas')}
@@ -1028,7 +1028,6 @@ async function transfer(){
         });
 }
 
-// === REVISI: TUTUP BULAN DENGAN STICKY SUMMARY & AKTUAL TERPAKAI ===
 window.recalcClosing = function() {
     let p=plan(); if(!p) return;
     let ps=pstats(p), it=items(p.id);
@@ -1038,7 +1037,6 @@ window.recalcClosing = function() {
         let act = n(v('act_' + x.id));
         totalActual += act;
         
-        // Update per-item status
         let diff = x.amount - act;
         let statusEl = document.getElementById('status_' + x.id);
         if (statusEl) {
@@ -1059,7 +1057,6 @@ window.recalcClosing = function() {
         sumNetEl.className = netCash < 0 ? 'negative' : 'positive';
     }
     
-    // Update dropdown options
     let actionSelect = document.getElementById('x_action');
     if (actionSelect) {
         let currentVal = actionSelect.value;
@@ -1158,7 +1155,6 @@ async function closing(){
         closeModal();await refresh();toast('Bulan ditutup')
     });
 
-    // Trigger kalkulasi awal
     setTimeout(() => recalcClosing(), 10);
 }
 
@@ -1229,7 +1225,6 @@ document.addEventListener('click',async e=>{
     }
     if(t.dataset.wealth){S.wealth=t.dataset.wealth;render();return}
     
-    // Aksi Spesifik
     if(t.dataset.fund)return fundItem(t.dataset.fund);
     if(t.dataset.allocate)return allocateGoal(t.dataset.allocate);
     
@@ -1242,8 +1237,6 @@ document.addEventListener('click',async e=>{
     
     if(t.dataset.addPocket)return addPocket(t.dataset.addPocket);
     if(t.dataset.reconcileAccount)return reconcileAccount(t.dataset.reconcileAccount);
-    
-    // REVISI: Edit & Hapus Kantong
     if(t.dataset.editPocket)return editPocket(t.dataset.editPocket);
     if(t.dataset.delPocket)return delPocket(t.dataset.delPocket);
     
@@ -1285,7 +1278,6 @@ $('#restoreFile').addEventListener('change',e=>{
     r.readAsText(file);e.target.value=''
 });
 
-// === FIX: Menyembunyikan Nav saat Keyboard Muncul ===
 document.addEventListener('focusin', (e) => {
   const tag = e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
