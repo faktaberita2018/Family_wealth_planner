@@ -1,10 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Latar belakang kotak melengkung hijau lime -->
   <rect width="100" height="100" rx="24" fill="#b6eb2b" />
-  <!-- Atap Rumah -->
-  <path d="M24 48 L50 24 L76 48" fill="none" stroke="#15201a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
-  <!-- Dinding Rumah -->
-  <path d="M32 48 V76 H68 V48" fill="none" stroke="#15201a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
-  <!-- Grafik Naik (Kekayaan) -->
-  <path d="M42 64 L50 56 L58 62 L68 52" fill="none" stroke="#15201a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M62 52 H68 V58" fill="none" stroke="#15201a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Batang Pohon (Trunk) -->
+  <path d="M43 90 C43 78 46 74 50 74 C54 74 57 78 57 90 Z" fill="#15201a" />
+  <rect x="38" y="88" width="24" height="4" rx="2" fill="#15201a" />
+  
+  <!-- Kanopi Pohon (Tumpukan Koin) -->
+  <g stroke="#b6eb2b" stroke-width="2">
+    <!-- Baris Bawah (3 Koin) -->
+    <circle cx="22" cy="62" r="14" fill="#15201a" />
+    <circle cx="50" cy="62" r="14" fill="#15201a" />
+    <circle cx="78" cy="62" r="14" fill="#15201a" />
+    
+    <!-- Baris Tengah (2 Koin) -->
+    <circle cx="36" cy="44" r="14" fill="#15201a" />
+    <circle cx="64" cy="44" r="14" fill="#15201a" />
+    
+    <!-- Baris Atas (1 Koin) -->
+    <circle cx="50" cy="26" r="14" fill="#15201a" />
+  </g>
+  
+  <!-- Titik Tengah Koin (Lubang Koin) -->
+  <circle cx="22" cy="62" r="3" fill="#b6eb2b" />
+  <circle cx="50" cy="62" r="3" fill="#b6eb2b" />
+  <circle cx="78" cy="62" r="3" fill="#b6eb2b" />
+  <circle cx="36" cy="44" r="3" fill="#b6eb2b" />
+  <circle cx="64" cy="44" r="3" fill="#b6eb2b" />
+  
+  <!-- Titik atas dibuat lebih besar sedikit sebagai aksen (pucuk pohon) -->
+  <circle cx="50" cy="26" r="4" fill="#b6eb2b" />
 </svg>
