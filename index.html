@@ -10,21 +10,36 @@
 </head>
 <body>
 <div id="toast"></div>
-<section id="onboarding" class="overlay hidden"><div class="onboard shell">
-  <div class="brand"><div class="logo">FW</div><b>Family Wealth Planner</b></div>
-  <div id="onStep"></div>
-</div></section>
-<header><div class="shell bar">
-  <div class="brand">
-    <div class="logo">FW</div>
-    <div class="brand-text"><b>Family Wealth Planner</b><small>Fondasi Milestone 1.2</small></div>
+
+<!-- FIX: Paksa sembunyikan Onboarding saat awal load -->
+<section id="onboarding" class="overlay" style="display: none;">
+  <div class="onboard shell">
+    <div class="brand">
+      <div class="logo"><img src="icon.svg" alt="FW"></div>
+      <b>Family Wealth Planner</b>
+    </div>
+    <div id="onStep"></div>
   </div>
-  <div class="bar-actions">
-    <button class="icon" data-action="privacy" aria-label="Toggle privacy">👁</button>
-    <button class="icon" data-action="theme" aria-label="Toggle theme">◐</button>
+</section>
+
+<header>
+  <div class="shell bar">
+    <div class="brand">
+      <div class="logo"><img src="icon.svg" alt="FW"></div>
+      <div class="brand-text">
+        <b>Family Wealth Planner</b>
+        <small>Fondasi Milestone 1.2</small>
+      </div>
+    </div>
+    <div class="bar-actions">
+      <button class="icon" data-action="privacy" aria-label="Toggle privacy">👁</button>
+      <button class="icon" data-action="theme" aria-label="Toggle theme">◐</button>
+    </div>
   </div>
-</div></header>
+</header>
+
 <main class="shell"><section id="view"></section></main>
+
 <nav id="nav">
   <button data-page="home">⌂<span>Beranda</span></button>
   <button data-page="plan">▤<span>Rencana</span></button>
@@ -32,13 +47,22 @@
   <button data-page="wealth">◇<span>Kekayaan</span></button>
   <button data-page="more">•••<span>Lainnya</span></button>
 </nav>
+
 <dialog id="modal">
-  <div class="modal-head"><b id="modalTitle"></b><button class="icon" data-action="closeModal" aria-label="Tutup">×</button></div>
+  <div class="modal-head">
+    <b id="modalTitle"></b>
+    <button class="icon" data-action="closeModal" aria-label="Tutup">×</button>
+  </div>
   <form id="modalForm">
     <div id="modalBody" class="modal-body"></div>
     <div id="modalFoot" class="modal-foot"></div>
   </form>
 </dialog>
-<input id="restoreFile" class="hidden" type="file" accept="application/json">
-<script src="db.js"></script><script src="app.js"></script>
-</body></html>
+
+<!-- FIX: Paksa sembunyikan Input File -->
+<input id="restoreFile" style="display: none;" type="file" accept="application/json">
+
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
