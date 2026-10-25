@@ -5,13 +5,63 @@ const n=v=>Number(String(v||0).replace(/[^0-9.-]/g,''))||0;
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const dateNow=()=>new Date().toISOString();
 
+// === [1] HELPER BARU (format tanggal & parsing rupiah) ===
+function formatDateTime(iso){
+    if(!iso) return '—';
+    try { return new Date(iso).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}); }
+    catch { return iso; }
+}
+function parseRupiah(raw){
+    if(raw==null) return NaN;
+    const s=String(raw).trim();
+    if(!s) return NaN;
+    const cleaned=s.replace(/[^\d.,-]/g,'');
+    if(!cleaned||/^-+$/.test(cleaned)) return NaN;
+    let normalized;
+    if(/,\d{1,2}$/.test(cleaned)) normalized=cleaned.replace(/\./g,'').replace(',','.');
+    else normalized=cleaned.replace(/[.,]/g,'');
+    const num=Number(normalized);
+    return Number.isFinite(num)?num:NaN;
+}
+function isValidPrice(x){return Number.isFinite(x)&&x>0}
+
 function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2300)}
 function money(x){return S.privacy?'Rp••••••':new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n(x))}
 function monthName(x){return new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric'}).format(new Date(x+'-01T00:00:00'))}
 function f(label,id,type='text',value='',full=''){return `<div class="field ${full}"><label>${label}</label><input class="input" id="${id}" type="${type}" value="${esc(value)}"></div>`}
 function v(id){return $('#'+id)?.value||''}
-function modal(title,body,save){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modalFoot').innerHTML=`<button type="button" class="btn ghost" data-action="closeModal">Batal</button>${save?`<button class="btn primary" type="submit">Simpan</button>`:''}`;$('#modalForm').onsubmit=async e=>{e.preventDefault();if(save)await save()};$('#modal').showModal()}
+
+// === [3] MODAL DENGAN OPS + CONFIRM MODAL ===
+function modal(title,body,save,opts={}){
+    const cancelLabel = opts.cancelLabel || 'Batal';
+    const saveLabel = opts.saveLabel || 'Simpan';
+    $('#modalTitle').textContent=title;
+    $('#modalBody').innerHTML=body;
+    $('#modalFoot').innerHTML=
+        `<button type="button" class="btn ghost" data-action="closeModal">${cancelLabel}</button>`+
+        (save?`<button class="btn primary" type="submit">${saveLabel}</button>`:'');
+    $('#modalForm').onsubmit=async e=>{
+        e.preventDefault();
+        if(!save) return;
+        try { await save(); }
+        catch(err){ toast(err?.message || 'Terjadi kesalahan'); }
+    };
+    $('#modal').showModal();
+}
 function closeModal(){$('#modal').close()}
+function confirmModal(title, body){
+    return new Promise(resolve=>{
+        let settled=false;
+        const finish=v=>{ if(settled) return; settled=true; resolve(v); };
+        modal(title, body, async()=>{ finish(true); closeModal(); },
+              { cancelLabel:'Batal', saveLabel:'Lanjutkan' });
+        const onClose=()=>{
+            $('#modal').removeEventListener('close', onClose);
+            if(!settled) finish(false);
+        };
+        $('#modal').addEventListener('close', onClose);
+    });
+}
 
 async function refresh(){
     for(let s of FWPDB.stores) S.cache[s]=await FWPDB.all(s);
@@ -21,18 +71,49 @@ async function refresh(){
     if(!set?.onboarded)showOnboarding(1)
 }
 
+// === [2] SETTING DENGAN DEFAULT EXPANDED + SOFT MIGRATION + getSourceStatus ===
 function setting(){
     let def = {
-        id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used', 
-        surplusBehavior:'ask', strictBalance:false, theme:'light', privacy:false, 
+        id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used',
+        surplusBehavior:'ask', strictBalance:false, theme:'light', privacy:false,
         ownerName:'Kamu', goldPrice:2000000,
-        goldPrices: { pegadaian: 0, lastSync: null },
-        palacePrices: { '24K': 0, '18K': 0, '9K': 0, lastSync: null }
+        goldPrices:{pegadaian:0,lastSync:null,lastSuccess:null,lastAttempt:null,lastError:null,priceSource:'auto',manualAt:null},
+        palacePrices:{'24K':0,'18K':0,'9K':0,lastSync:null,lastSuccess:null,lastAttempt:null,lastError:null,priceSource:'auto',manualAt:null}
     };
     let s = S.cache.settings.find(x=>x.id==='main') || def;
-    if(!s.goldPrices) s.goldPrices = { pegadaian: 0, lastSync: null };
-    if(!s.palacePrices) s.palacePrices = { '24K': 0, '18K': 0, '9K': 0, lastSync: null };
+    if(!s.goldPrices) s.goldPrices = {...def.goldPrices};
+    if(!s.palacePrices) s.palacePrices = {...def.palacePrices};
+    if(!s.goldPrices.priceSource) s.goldPrices.priceSource='auto';
+    if(!s.goldPrices.lastSuccess && s.goldPrices.lastSync) s.goldPrices.lastSuccess=s.goldPrices.lastSync;
+    if(!s.palacePrices.priceSource) s.palacePrices.priceSource='auto';
+    if(!s.palacePrices.lastSuccess && s.palacePrices.lastSync) s.palacePrices.lastSuccess=s.palacePrices.lastSync;
     return s;
+}
+
+function getSourceStatus(src){
+    const s=setting();
+    if(src==='pegadaian'){
+        const g=s.goldPrices||{};
+        return {
+            price: n(g.pegadaian),
+            prices: null,
+            priceSource: g.priceSource||'auto',
+            lastSuccess: g.lastSuccess||null,
+            lastAttempt: g.lastAttempt||null,
+            lastError: g.lastError||null,
+            manualAt: g.manualAt||null
+        };
+    }
+    const p=s.palacePrices||{};
+    return {
+        price: n(p['24K']),
+        prices: {'24K':n(p['24K']),'18K':n(p['18K']),'9K':n(p['9K'])},
+        priceSource: p.priceSource||'auto',
+        lastSuccess: p.lastSuccess||null,
+        lastAttempt: p.lastAttempt||null,
+        lastError: p.lastError||null,
+        manualAt: p.manualAt||null
+    };
 }
 
 function acct(id){return S.cache.accounts.find(x=>x.id===id)}
@@ -44,27 +125,21 @@ function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 // --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
 
-// Fungsi Harga Emas: Mendukung Pegadaian dan The Palace (per kadar)
-function getGoldPrice(goldItem) {
-    let brand = String(goldItem.brand || '').toLowerCase();
-    let karat = String(goldItem.karat || '').toUpperCase();
-    let gp = setting().goldPrices || {};
-    let pp = setting().palacePrices || {};
-
-    // Jika merek The Palace, gunakan harga berdasarkan kadar
-    if (brand.includes('palace') || brand.includes('the palace')) {
-        if (karat === '24K' && pp['24K'] > 0) return n(pp['24K']);
-        if (karat === '18K' && pp['18K'] > 0) return n(pp['18K']);
-        if (karat === '9K' && pp['9K'] > 0) return n(pp['9K']);
-        // Fallback ke harga 24K jika kadar tidak ditemukan
-        if (pp['24K'] > 0) return n(pp['24K']);
+// === [10] getGoldPrice (logika sama, komentar prioritas diperjelas) ===
+// Prioritas: harga spesifik merek/kadar → Pegadaian → goldPrice manual fallback
+function getGoldPrice(goldItem){
+    const brand=String(goldItem.brand||'').toLowerCase();
+    const karat=String(goldItem.karat||'').toUpperCase();
+    const gp=setting().goldPrices||{};
+    const pp=setting().palacePrices||{};
+    if(brand.includes('palace')){
+        if(karat==='24K'&&n(pp['24K'])>0) return n(pp['24K']);
+        if(karat==='18K'&&n(pp['18K'])>0) return n(pp['18K']);
+        if(karat==='9K' &&n(pp['9K']) >0) return n(pp['9K']);
+        if(n(pp['24K'])>0) return n(pp['24K']);
     }
-    
-    // Jika bukan Palace (atau belum sync), gunakan harga Pegadaian
-    if (gp.pegadaian > 0) return n(gp.pegadaian);
-    
-    // Fallback terakhir: harga manual
-    return n(setting().goldPrice); 
+    if(n(gp.pegadaian)>0) return n(gp.pegadaian);
+    return n(setting().goldPrice);
 }
 
 function totalGoldValue(){ 
@@ -151,62 +226,86 @@ function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><
 
 function accountsView(){return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div><div class="grid two">${S.cache.institutions.map(i=>`<div class="card"><div style="display:flex;justify-content:space-between"><div><b>${esc(i.name)}</b><small class="muted">${esc(i.type)}</small></div><button class="btn ghost" data-add-account="${i.id}">＋ Rekening</button></div>${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{let pa=S.cache.pockets.filter(p=>p.accountId===a.id),alloc=pocketAllocated(a.id),ua=unallocated(a);return `<div style="margin-top:15px"><div class="row"><div class="grow"><b>${esc(a.name)}</b>${a.isMain?'<span class="badge green">Utama</span>':''}<small class="muted">Saldo aktual · Kantong ${money(alloc)} · Bebas ${money(ua)}</small></div><b>${money(a.balance)}</b><button class="icon" data-reconcile-account="${a.id}">✎</button><button class="icon" data-add-pocket="${a.id}">＋</button></div>${ua<0?'<div class="warning small">Total kantong melebihi saldo rekening. Lakukan rekonsiliasi.</div>':''}${pa.map(p=>`<div class="row" style="margin-left:17px"><div class="grow"><b>↳ ${esc(p.name)}</b><small class="muted">Alokasi dalam rekening</small></div><b>${money(p.balance)}</b><button class="icon" data-reconcile-pocket="${p.id}">✎</button></div>`).join('')}</div>`}).join('')||'<div class="empty">Belum ada rekening.</div>'}</div>`).join('')}</div>`}
 
-// --- MODUL EMAS (Mendukung Pegadaian & The Palace) ---
-function goldView() {
-    let gp = setting().goldPrices || {};
-    let pp = setting().palacePrices || {};
-    let lastSync = gp.lastSync ? new Date(gp.lastSync).toLocaleString('id-ID') : 'Belum pernah';
-    
-    return `<div class="section">
-        <div>
-            <h2>Aset Emas</h2>
-            <span class="muted" style="display:block;margin-bottom:5px">Sync terakhir: ${lastSync}</span>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
-                ${gp.pegadaian ? `<span class="badge orange">Pegadaian: ${money(gp.pegadaian)}/gr</span>` : ''}
-                ${pp['24K'] ? `<span class="badge blue">Palace 24K: ${money(pp['24K'])}/gr</span>` : ''}
-                ${pp['18K'] ? `<span class="badge green">Palace 18K: ${money(pp['18K'])}/gr</span>` : ''}
-                ${pp['9K'] ? `<span class="badge purple">Palace 9K: ${money(pp['9K'])}/gr</span>` : ''}
+// === [6] goldView BARU dengan status per-sumber ===
+function sourceCard(src, status){
+    const sourceBadge = status.priceSource==='manual'
+        ? `<span class="badge purple">Manual</span>`
+        : status.lastSuccess ? `<span class="badge green">Auto</span>` : `<span class="badge">—</span>`;
+    const info = status.lastSuccess
+        ? `Terakhir: ${formatDateTime(status.lastSuccess)}`
+        : 'Belum pernah diperbarui';
+    const errBlock = status.lastError
+        ? `<div class="warning small" style="margin-top:8px">⚠ ${esc(status.lastError.message||'Gagal')}<br><span class="muted">${formatDateTime(status.lastError.at)}</span></div>`
+        : '';
+    if(src==='pegadaian'){
+        return `<div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <b>Pegadaian</b>${sourceBadge}
             </div>
+            <small class="muted" style="display:block;margin-top:4px">${info}</small>
+            <div style="margin-top:10px">
+                <b style="font-size:clamp(16px,4vw,20px)">${status.price>0?money(status.price)+' / gr':'<span class="muted">— Belum diatur</span>'}</b>
+            </div>
+            ${errBlock}
+        </div>`;
+    }
+    const p = status.prices||{'24K':0,'18K':0,'9K':0};
+    const row = (k,val)=>`<div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px">
+        <span class="small muted">${k}</span>
+        <b class="small">${val>0?money(val):'—'}</b></div>`;
+    return `<div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <b>The Palace</b>${sourceBadge}
         </div>
-        <div style="display:flex;gap:8px">
+        <small class="muted" style="display:block;margin-top:4px">${info}</small>
+        <div style="margin-top:8px">${row('24K',p['24K'])}${row('18K',p['18K'])}${row('9K',p['9K'])}</div>
+        ${errBlock}
+    </div>`;
+}
+
+function goldView(){
+    const peg=getSourceStatus('pegadaian');
+    const pal=getSourceStatus('palace');
+    return `<div class="section">
+        <div><h2>Aset Emas</h2><span class="muted small">Harga acuan per gram</span></div>
+        <div class="row-actions">
             <button class="btn ghost" data-action="syncGold">🔄 Sync</button>
+            <button class="btn ghost" data-action="setGoldPrice">✎ Manual</button>
             <button class="btn primary" data-action="addGold">＋ Emas</button>
         </div>
     </div>
-    <div class="grid three">
+    <div class="grid two">${sourceCard('pegadaian', peg)}${sourceCard('palace', pal)}</div>
+    <div class="grid three" style="margin-top:15px">
         ${S.cache.goldItems.filter(g=>g.status!=='sold').map(g=>{
-            let currentPrice = getGoldPrice(g);
-            let val = n(g.weight) * currentPrice;
-            let profit = val - n(g.buyPrice);
-            let profitPct = n(g.buyPrice) > 0 ? (profit / n(g.buyPrice)) * 100 : 0;
-            let profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
-            let brandLabel = g.brand;
-            if (g.brand === 'The Palace' && g.karat) brandLabel += ` (${g.karat})`;
-            
+            const currentPrice=getGoldPrice(g);
+            const val=n(g.weight)*currentPrice;
+            const profit=val-n(g.buyPrice);
+            const profitPct=n(g.buyPrice)>0?(profit/n(g.buyPrice))*100:0;
+            const profitColor=profit>=0?'positive':'negative';
+            const brandLabel=g.brand+(g.brand==='The Palace'&&g.karat?` (${g.karat})`:'');
             return `<div class="card">
-                <div style="display:flex;justify-content:space-between;align-items:center">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
                     <span class="badge orange">${esc(brandLabel)}</span>
-                    <span class="badge blue" style="font-size:10px">${g.owner || 'Milik Sendiri'}</span>
+                    <span class="badge blue" style="font-size:10px">${esc(g.owner||'Milik Sendiri')}</span>
                 </div>
                 <h3 style="margin:10px 0">${esc(g.name)}</h3>
-                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                <div style="display:flex;justify-content:space-between;gap:8px">
                     <small class="muted">Beli: ${money(g.buyPrice)}</small>
                     <b>${n(g.weight)} gr</b>
                 </div>
-                <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-                        <small class="muted">Nilai Pasar</small>
-                        <b>${money(val)}</b>
+                <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+                    <div style="display:flex;justify-content:space-between;gap:8px">
+                        <small class="muted">Nilai Pasar</small><b>${money(val)}</b>
                     </div>
-                    <div style="display:flex;justify-content:space-between">
+                    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px">
                         <small class="muted">P/L</small>
-                        <b style="color:${profitColor}">${profit >= 0 ? '+' : ''}${money(profit)} <small>(${profitPct.toFixed(1)}%)</small></b>
+                        <b class="${profitColor}">${profit>=0?'+':''}${money(profit)} <small>(${profitPct.toFixed(1)}%)</small></b>
                     </div>
                 </div>
                 <button class="btn dark" style="margin-top:10px;width:100%" data-sell-gold="${g.id}">Jual Emas</button>
-            </div>`
-        }).join('')||'<div class="card empty">Belum ada emas tercatat.</div>'}
-    </div>`
+            </div>`;
+        }).join('')||'<div class="card empty" style="grid-column:1/-1">Belum ada emas tercatat.</div>'}
+    </div>`;
 }
 
 // --- MODUL ASET TETAP ---
@@ -224,7 +323,7 @@ function assetsView() {
                 </div>
                 <h3 style="margin:10px 0">${esc(a.name)}</h3>
                 <small class="muted">Beli: ${money(a.buyPrice)}</small>
-                <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+                <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
                     <small class="muted">Nilai Saat Ini</small>
                     <b style="display:block;font-size:18px">${money(a.value)}</b>
                 </div>
@@ -313,22 +412,52 @@ async function seed(){
 async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name','text','Rencana '+monthName(S.month)),async()=>{await FWPDB.put('plans',{id:id('pl'),month:S.month,name:v('x_name'),status:'open',createdAt:dateNow()});closeModal();await refresh();toast('Rencana dibuat')})}
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
+
+// === [7] fundItem dengan rollback ===
 async function fundItem(iid){
-    let x=await FWPDB.get('planItems',iid);
-    if(x.fundingStatus==='funded')return toast('Pos sudah didanai. Gunakan riwayat bila perlu dibatalkan.');
-    modal('Siapkan Dana',`<p class="muted">${esc(x.name)} · ${money(x.amount)}</p><div class="field"><label>Metode</label><select id="x_mode" class="input"><option value="marker">Hanya penanda, jangan ubah saldo</option><option value="transfer">Kurangi sumber dan pindahkan ke tujuan</option></select></div><div class="formgrid" style="margin-top:12px"><div class="field"><label>Sumber</label><select id="x_from" class="input"><option value="">Pilih</option>${sourceOpts(x.sourceId)}</select></div><div class="field"><label>Tujuan rekening/kantong</label><select id="x_to" class="input"><option value="">Pilih</option>${sourceOpts()}</select></div></div>`,async()=>{
-        let mode=v('x_mode'),from=v('x_from'),to=v('x_to');
-        try{
-            if(mode==='transfer'){
-                if(!from||!to||from===to)return toast('Pilih sumber dan tujuan berbeda');
-                await alterSource(from,-n(x.amount),'Pendanaan pos: '+x.name,{itemId:x.id,counterpart:to});
-                await alterSource(to,n(x.amount),'Dana masuk pos: '+x.name,{itemId:x.id,counterpart:from})
-            }
-            x.fundingStatus='funded';x.fundingMode=mode;x.fundedAt=dateNow();await FWPDB.put('planItems',x);
-            await ledger('funding','Tandai funded: '+x.name,0,{itemId:x.id,mode},false);
-            closeModal();await refresh();toast('Pos ditandai Dana Disiapkan')
-        }catch(e){toast(e.message)}
-    })
+    let x=await FWPDB.get('planItems', iid);
+    if(x.fundingStatus==='funded') return toast('Pos sudah didanai.');
+    modal('Siapkan Dana',
+        `<p class="muted">${esc(x.name)} · ${money(x.amount)}</p>
+         <div class="field"><label>Metode</label>
+           <select id="x_mode" class="input">
+             <option value="marker">Hanya penanda, jangan ubah saldo</option>
+             <option value="transfer">Kurangi sumber dan pindahkan ke tujuan</option>
+           </select></div>
+         <div class="formgrid" style="margin-top:12px">
+           <div class="field"><label>Sumber</label>
+             <select id="x_from" class="input"><option value="">Pilih</option>${sourceOpts(x.sourceId)}</select></div>
+           <div class="field"><label>Tujuan</label>
+             <select id="x_to" class="input"><option value="">Pilih</option>${sourceOpts()}</select></div>
+         </div>`,
+        async ()=>{
+            const mode=v('x_mode'), from=v('x_from'), to=v('x_to');
+            try {
+                if(mode==='transfer'){
+                    if(!from||!to||from===to) return toast('Pilih sumber dan tujuan berbeda');
+                    let firstDone=false;
+                    try {
+                        await alterSource(from, -n(x.amount), 'Pendanaan pos: '+x.name,
+                            {itemId:x.id, counterpart:to});
+                        firstDone=true;
+                        await alterSource(to, n(x.amount), 'Dana masuk pos: '+x.name,
+                            {itemId:x.id, counterpart:from});
+                    } catch(innerErr){
+                        if(firstDone){
+                            try {
+                                await alterSource(from, n(x.amount),
+                                    'Rollback: '+x.name, {itemId:x.id, rollback:true});
+                            } catch(rbErr){ console.error('Rollback failed', rbErr); }
+                        }
+                        throw innerErr;
+                    }
+                }
+                x.fundingStatus='funded'; x.fundingMode=mode; x.fundedAt=dateNow();
+                await FWPDB.put('planItems', x);
+                await ledger('funding','Tandai funded: '+x.name,0,{itemId:x.id,mode},false);
+                closeModal(); await refresh(); toast('Pos ditandai Dana Disiapkan');
+            } catch(e){ toast(e.message||'Gagal'); }
+        });
 }
 
 async function addGoal(){
@@ -357,7 +486,7 @@ async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f(
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
 
-// --- CRUD EMAS (Mendukung The Palace) ---
+// --- CRUD EMAS ---
 async function addGold(){
     modal('Tambah Emas', `<div class="formgrid">
         ${f('Nama / Keterangan','x_name','text','Cincin Emas')}
@@ -391,7 +520,6 @@ async function addGold(){
     });
 }
 
-// Fungsi toggle untuk menampilkan pilihan kadar
 window.toggleKarat = function() {
     let brand = $('#x_brand')?.value;
     let field = $('#karatField');
@@ -400,47 +528,163 @@ window.toggleKarat = function() {
     }
 };
 
-async function syncGoldPrices() {
-    toast('Menarik data harga emas...');
+// === [4] FETCH per-sumber + status per-sumber + modal hasil ===
+async function fetchWithTimeout(url, opts={}, ms=12000){
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(), ms);
     try {
-        // 1. Ambil harga Pegadaian
-        let resPeg = await fetch('/api/gold-price');
-        let dataPeg = await resPeg.json();
-        
-        // 2. Ambil harga The Palace
-        let resPalace = await fetch('/api/palace-gold-price');
-        let dataPalace = await resPalace.json();
-
-        let s = setting();
-        let successCount = 0;
-
-        if (dataPeg.success && dataPeg.pegadaian?.jualPerGram > 0) {
-            s.goldPrices = { pegadaian: dataPeg.pegadaian.jualPerGram, lastSync: dataPeg.timestamp };
-            s.goldPrice = s.goldPrices.pegadaian; // Fallback
-            successCount++;
-        }
-
-        if (dataPalace.success && dataPalace.palace) {
-            s.palacePrices = {
-                '24K': dataPalace.palace['24K'] || 0,
-                '18K': dataPalace.palace['18K'] || 0,
-                '9K': dataPalace.palace['9K'] || 0,
-                lastSync: dataPalace.timestamp
-            };
-            successCount++;
-        }
-
-        if (successCount > 0) {
-            await FWPDB.put('settings', s);
-            await refresh();
-            toast('Harga emas berhasil diperbarui!');
-        } else {
-            throw new Error('Gagal dari server');
-        }
-    } catch (e) {
-        console.error(e);
-        toast('Gagal sinkronisasi. Cek koneksi atau input manual.');
+        const res=await fetch(url, {...opts, signal:ctrl.signal});
+        return res;
+    } finally { clearTimeout(timer); }
+}
+function normalizeError(e){
+    if(e?.name==='AbortError') return {code:'timeout', message:'Koneksi timeout'};
+    if(e?.code) return e;
+    if(e instanceof TypeError) return {code:'network', message:'Tidak dapat menghubungi server'};
+    return {code:'unknown', message:e?.message||'Kesalahan tidak diketahui'};
+}
+async function fetchPegadaian(){
+    const t0=Date.now();
+    try {
+        const res=await fetchWithTimeout('/api/gold-price');
+        if(!res.ok) throw {code:'http', message:`Server merespons HTTP ${res.status}`};
+        let data;
+        try { data=await res.json(); }
+        catch { throw {code:'parse', message:'Respons bukan JSON valid'} }
+        if(!data.success) throw {code:'source', message:data.error||'Sumber melaporkan kegagalan'};
+        if(!data.pegadaian || typeof data.pegadaian!=='object')
+            throw {code:'invalid', message:'Respons tidak sesuai format Pegadaian. Periksa endpoint /api/gold-price.'};
+        const price=Number(data.pegadaian.jualPerGram);
+        if(!Number.isFinite(price)||price<=0)
+            throw {code:'invalid', message:'Data harga Pegadaian tidak ditemukan atau tidak valid'};
+        return {ok:true, source:'pegadaian', label:'Pegadaian', price, durationMs:Date.now()-t0};
+    } catch(e){
+        return {ok:false, source:'pegadaian', label:'Pegadaian',
+                error:normalizeError(e), durationMs:Date.now()-t0};
     }
+}
+async function fetchPalace(){
+    const t0=Date.now();
+    try {
+        const res=await fetchWithTimeout('/api/palace-gold-price');
+        if(!res.ok) throw {code:'http', message:`Server merespons HTTP ${res.status}`};
+        let data;
+        try { data=await res.json(); }
+        catch { throw {code:'parse', message:'Respons bukan JSON valid'} }
+        if(!data.success) throw {code:'source', message:data.error||'Sumber melaporkan kegagalan'};
+        const p=data.palace||{};
+        const prices={
+            '24K':Number(p['24K'])||0,
+            '18K':Number(p['18K'])||0,
+            '9K' :Number(p['9K']) ||0
+        };
+        if(prices['24K']<=0 && prices['18K']<=0 && prices['9K']<=0)
+            throw {code:'invalid', message:'Data harga The Palace kosong atau tidak valid'};
+        return {ok:true, source:'palace', label:'The Palace', prices, durationMs:Date.now()-t0};
+    } catch(e){
+        return {ok:false, source:'palace', label:'The Palace',
+                error:normalizeError(e), durationMs:Date.now()-t0};
+    }
+}
+function applyGoldSyncResults(results){
+    const s=setting();
+    const now=new Date().toISOString();
+    for(const r of results){
+        if(r.source==='pegadaian'){
+            const prev=s.goldPrices||{};
+            if(r.ok){
+                s.goldPrices={
+                    ...prev,
+                    pegadaian:r.price,
+                    lastSync:now, lastSuccess:now, lastAttempt:now,
+                    lastError:null,
+                    priceSource:'auto',
+                    manualAt:null
+                };
+                s.goldPrice=r.price;
+            } else {
+                s.goldPrices={...prev, lastAttempt:now, lastError:{...r.error, at:now}};
+            }
+        } else if(r.source==='palace'){
+            const prev=s.palacePrices||{};
+            if(r.ok){
+                s.palacePrices={
+                    ...prev,
+                    '24K':r.prices['24K'], '18K':r.prices['18K'], '9K':r.prices['9K'],
+                    lastSync:now, lastSuccess:now, lastAttempt:now,
+                    lastError:null,
+                    priceSource:'auto',
+                    manualAt:null
+                };
+            } else {
+                s.palacePrices={...prev, lastAttempt:now, lastError:{...r.error, at:now}};
+            }
+        }
+    }
+    return FWPDB.put('settings', s);
+}
+function showGoldSyncResultModal(results, beforeStatus){
+    const allOk=results.every(r=>r.ok);
+    const anyOk=results.some(r=>r.ok);
+    const title = allOk ? '✅ Semua sumber berhasil'
+                : anyOk ? '⚠️ Berhasil sebagian'
+                : '❌ Semua sumber gagal';
+    const rows = results.map(r=>{
+        const before = beforeStatus[r.source];
+        const detail = r.ok
+            ? (r.source==='pegadaian'
+                ? `Harga baru: <b>${money(r.price)}</b> / gram`
+                : `24K <b>${money(r.prices['24K'])}</b> · 18K <b>${money(r.prices['18K'])}</b> · 9K <b>${money(r.prices['9K'])}</b>`)
+            : `<span class="muted">Alasan: ${esc(r.error.message)}</span>`
+              + (before?.lastSuccess
+                  ? `<br><span class="small muted">Harga terakhir valid tetap digunakan (${formatDateTime(before.lastSuccess)}).</span>`
+                  : `<br><span class="small muted">Belum ada harga valid tersimpan.</span>`);
+        return `<div class="sync-row">
+            <div class="sync-row-head">
+                <span class="badge ${r.ok?'green':'red'}">${r.ok?'✅':'⚠️'} ${esc(r.label)}</span>
+                <span class="small ${r.ok?'positive':'negative'}">${r.ok?'Berhasil diperbarui':'Gagal diperbarui'}</span>
+            </div>
+            <div class="sync-row-body">${detail}</div>
+        </div>`;
+    }).join('');
+    modal('Hasil Update Harga Emas', `
+        <div style="margin-bottom:10px"><b>${title}</b></div>
+        <div>${rows}</div>
+        ${!allOk ? `<div class="info small" style="margin-top:12px">💡 Coba lagi nanti, atau isi harga manual melalui tombol <b>Manual</b>.</div>` : ''}
+        <div class="small muted" style="margin-top:10px">Dijalankan: ${new Date().toLocaleString('id-ID')}</div>
+    `, null, {cancelLabel:'Tutup'});
+}
+async function syncGoldPrices(){
+    const s=setting();
+    const manualSources=[];
+    if(s.goldPrices?.priceSource==='manual' && n(s.goldPrices?.pegadaian)>0) manualSources.push('Pegadaian');
+    if(s.palacePrices?.priceSource==='manual' && n(s.palacePrices?.['24K'])>0) manualSources.push('The Palace');
+
+    if(manualSources.length>0){
+        const ok=await confirmModal('Harga Manual Akan Ditimpa',
+            `<p>Harga berikut saat ini diatur manual:</p>
+             <p style="margin:10px 0"><b>${manualSources.join(', ')}</b></p>
+             <p class="small muted">Melanjutkan sync akan menggantinya dengan harga pasar terbaru. Harga manual sebelumnya tidak dapat dikembalikan.</p>`);
+        if(!ok) return;
+    }
+
+    const beforeStatus={
+        pegadaian:getSourceStatus('pegadaian'),
+        palace:getSourceStatus('palace')
+    };
+
+    modal('Sinkronisasi Harga Emas',
+        `<div style="text-align:center;padding:24px 10px">
+            <div class="spinner"></div>
+            <p style="margin-top:16px">Menghubungi sumber harga…</p>
+            <p class="small muted">Pegadaian dan The Palace</p>
+        </div>`, null, {cancelLabel:'Tutup'});
+
+    const results=await Promise.all([fetchPegadaian(), fetchPalace()]);
+    await applyGoldSyncResults(results);
+    await refresh();
+    closeModal();
+    showGoldSyncResultModal(results, beforeStatus);
 }
 
 async function sellGold(id) {
@@ -505,16 +749,134 @@ async function addDebt(){
     });
 }
 
-async function setGoldPrice(){
-    let s = setting();
-    modal('Harga Emas Manual (Fallback)', `<div class="info small" style="margin-bottom:12px">Gunakan ini jika API Vercel gagal / Anda ingin mengatur harga rata-rata secara manual.</div>${f('Harga per Gram (Rp)','x_price','number',s.goldPrice)}`, async()=>{
-        s.goldPrice = n(v('x_price'));
-        await FWPDB.put('settings', s);
-        closeModal(); await refresh(); toast('Harga emas manual diperbarui');
+// === [5] setGoldPrice BARU: pilih sumber + input manual per-kadar ===
+async function setGoldPrice(preselected='pegadaian'){
+    const s=setting();
+    const gp=s.goldPrices||{};
+    const pp=s.palacePrices||{};
+
+    const buildFields=src=>src==='pegadaian'
+        ? `<div id="goldPriceFields">
+             <div class="field">
+                 <label>Harga per Gram (Rp)</label>
+                 <input class="input" id="x_pegadaian" type="text" inputmode="numeric"
+                        placeholder="1.850.000" value="${esc(gp.pegadaian||'')}">
+                 <div class="small muted">Contoh: 1.850.000 atau 1850000</div>
+             </div>
+           </div>`
+        : `<div id="goldPriceFields">
+             <div class="field" style="margin-bottom:8px">
+                 <label>Harga 24K / gram (Rp)</label>
+                 <input class="input" id="x_palace24" type="text" inputmode="numeric"
+                        placeholder="2.269.000" value="${esc(pp['24K']||'')}">
+             </div>
+             <div class="field" style="margin-bottom:8px">
+                 <label>Harga 18K / gram (Rp)</label>
+                 <input class="input" id="x_palace18" type="text" inputmode="numeric"
+                        placeholder="1.700.000" value="${esc(pp['18K']||'')}">
+             </div>
+             <div class="field">
+                 <label>Harga 9K / gram (Rp)</label>
+                 <input class="input" id="x_palace9" type="text" inputmode="numeric"
+                        placeholder="850.000" value="${esc(pp['9K']||'')}">
+             </div>
+             <div class="small muted" style="margin-top:6px">Isi minimal satu kadar. Kosongkan kadar yang tidak dipakai.</div>
+           </div>`;
+
+    modal('Input Harga Manual', `
+        <div class="info small" style="margin-bottom:12px">
+            Harga akan ditandai <b>manual</b> dan tidak akan tertimpa sync otomatis tanpa konfirmasi.
+        </div>
+        <div class="field" style="margin-bottom:12px">
+            <label>Sumber Harga</label>
+            <div class="choice" id="goldSourceChoice" style="grid-template-columns:1fr 1fr;display:grid">
+                <button type="button" data-gold-src="pegadaian" class="${preselected==='pegadaian'?'selected':''}">
+                    <b>Pegadaian</b><br><span class="muted small">Harga per gram</span>
+                </button>
+                <button type="button" data-gold-src="palace" class="${preselected==='palace'?'selected':''}">
+                    <b>The Palace</b><br><span class="muted small">Harga per kadar</span>
+                </button>
+            </div>
+        </div>
+        <div id="goldPriceFieldsContainer">${buildFields(preselected)}</div>
+    `, async () => {
+        const src=document.querySelector('#goldSourceChoice button.selected')?.dataset.goldSrc;
+        if(!src) return toast('Pilih sumber harga');
+        const now=new Date().toISOString();
+        if(src==='pegadaian'){
+            const price=parseRupiah(v('x_pegadaian'));
+            if(!isValidPrice(price)) return toast('Harga Pegadaian harus angka > 0');
+            s.goldPrices={...(s.goldPrices||{}), pegadaian:price,
+                priceSource:'manual', manualAt:now,
+                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
+            s.goldPrice=price;
+        } else {
+            const p24=parseRupiah(v('x_palace24'));
+            const p18=parseRupiah(v('x_palace18'));
+            const p9 =parseRupiah(v('x_palace9'));
+            const valid24=isValidPrice(p24), valid18=isValidPrice(p18), valid9=isValidPrice(p9);
+            if(!valid24&&!valid18&&!valid9) return toast('Isi minimal satu kadar dengan harga > 0');
+            s.palacePrices={...(s.palacePrices||{}),
+                '24K':valid24?p24:0,
+                '18K':valid18?p18:0,
+                '9K' :valid9 ?p9 :0,
+                priceSource:'manual', manualAt:now,
+                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
+        }
+        try {
+            await FWPDB.put('settings', s);
+            closeModal();
+            await refresh();
+            toast('Harga manual tersimpan');
+        } catch(e){
+            toast('Gagal menyimpan: '+(e?.message||'unknown'));
+        }
     });
+
+    setTimeout(()=>{
+        document.querySelectorAll('#goldSourceChoice [data-gold-src]').forEach(btn=>{
+            btn.addEventListener('click', e=>{
+                e.preventDefault();
+                document.querySelectorAll('#goldSourceChoice button')
+                    .forEach(b=>b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const c=document.querySelector('#goldPriceFieldsContainer');
+                if(c) c.innerHTML=buildFields(btn.dataset.goldSrc);
+            });
+        });
+    }, 0);
 }
 
-async function transfer(){modal('Transfer Saldo',`<div class="formgrid"><div class="field"><label>Dari</label><select id="x_from" class="input">${sourceOpts()}</select></div><div class="field"><label>Ke</label><select id="x_to" class="input">${sourceOpts()}</select></div>${f('Nominal','x_amount','number')}</div>`,async()=>{let from=v('x_from'),to=v('x_to'),a=n(v('x_amount'));if(!from||!to||from===to||!a)return toast('Lengkapi transfer');try{await alterSource(from,-a,'Transfer keluar',{counterpart:to});await alterSource(to,a,'Transfer masuk',{counterpart:from});closeModal();await refresh();toast('Transfer tercatat')}catch(e){toast(e.message)}})}
+// === [8] transfer dengan rollback ===
+async function transfer(){
+    modal('Transfer Saldo',
+        `<div class="formgrid">
+            <div class="field"><label>Dari</label><select id="x_from" class="input">${sourceOpts()}</select></div>
+            <div class="field"><label>Ke</label><select id="x_to" class="input">${sourceOpts()}</select></div>
+            ${f('Nominal','x_amount','number')}
+        </div>`,
+        async ()=>{
+            const from=v('x_from'), to=v('x_to'), a=n(v('x_amount'));
+            if(!from||!to||from===to||!a) return toast('Lengkapi transfer');
+            try {
+                let firstDone=false;
+                try {
+                    await alterSource(from,-a,'Transfer keluar',{counterpart:to});
+                    firstDone=true;
+                    await alterSource(to,a,'Transfer masuk',{counterpart:from});
+                } catch(innerErr){
+                    if(firstDone){
+                        try {
+                            await alterSource(from,a,'Rollback transfer',
+                                {counterpart:to, rollback:true});
+                        } catch(rbErr){ console.error('Rollback failed', rbErr); }
+                    }
+                    throw innerErr;
+                }
+                closeModal(); await refresh(); toast('Transfer tercatat');
+            } catch(e){ toast(e.message); }
+        });
+}
 
 async function closing(){
     let p=plan(),ps=pstats(p),set=setting(),it=items(p.id);
@@ -576,16 +938,27 @@ function download(name,text,type){let u=URL.createObjectURL(new Blob([text],{typ
 
 function shift(d){let x=new Date(S.month+'-01');x.setMonth(x.getMonth()+d);S.month=x.toISOString().slice(0,7);render()}
 
+// === [9] actions mapping dengan setGoldPrice(arg) & syncGold ===
 const actions={
-    closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution, transfer, closing, copyPlan, preferences, backup,
-    addGold, addAsset, addDebt, setGoldPrice, syncGold: syncGoldPrices,
+    closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
+    transfer, closing, copyPlan, preferences, backup,
+    addGold, addAsset, addDebt,
+    setGoldPrice: ()=>setGoldPrice('pegadaian'),
+    syncGold: syncGoldPrices,
     restore:()=>$('#restoreFile').click(),
     prevMonth:()=>shift(-1), nextMonth:()=>shift(1),
-    theme:async()=>{let s=setting();s.theme=s.theme==='dark'?'light':'dark';await FWPDB.put('settings',s);await refresh()},
-    privacy:async()=>{let s=setting();s.privacy=!s.privacy;await FWPDB.put('settings',s);await refresh()},
-    finishOnboarding:async()=>{
-        let s=setting();s={...s,onboarded:true,ownerName:v('onName')||'Kamu',budgetMode:ON.budgetMode,defaultClosing:ON.defaultClosing,surplusBehavior:v('onSurplus'),strictBalance:$('#onStrict').checked};
-        await FWPDB.put('settings',s);$('#onboarding').classList.add('hidden');await refresh()
+    theme: async()=>{ const s=setting(); s.theme=s.theme==='dark'?'light':'dark';
+        await FWPDB.put('settings',s); await refresh(); },
+    privacy: async()=>{ const s=setting(); s.privacy=!s.privacy;
+        await FWPDB.put('settings',s); await refresh(); },
+    finishOnboarding: async()=>{
+        let s=setting();
+        s={...s, onboarded:true, ownerName:v('onName')||'Kamu',
+           budgetMode:ON.budgetMode, defaultClosing:ON.defaultClosing,
+           surplusBehavior:v('onSurplus'), strictBalance:$('#onStrict').checked};
+        await FWPDB.put('settings',s);
+        $('#onboarding').classList.add('hidden');
+        await refresh();
     }
 };
 
@@ -593,20 +966,17 @@ document.addEventListener('click',async e=>{
     let t=e.target.closest('button');if(!t)return;
     if(t.dataset.page){S.page=t.dataset.page;render();return}
     if(t.dataset.action){
-        if($('#modal').open&&t.dataset.action!=='closeModal'&&!['theme','privacy','syncGold'].includes(t.dataset.action))closeModal();
+        if($('#modal').open&&t.dataset.action!=='closeModal'&&!['theme','privacy','syncGold','setGoldPrice'].includes(t.dataset.action))closeModal();
         await actions[t.dataset.action]?.();return
     }
     if(t.dataset.wealth){S.wealth=t.dataset.wealth;render();return}
     
-    // Aksi Spesifik Item
     if(t.dataset.fund)return fundItem(t.dataset.fund);
     if(t.dataset.allocate)return allocateGoal(t.dataset.allocate);
     if(t.dataset.addAccount)return addAccount(t.dataset.addAccount);
     if(t.dataset.addPocket)return addPocket(t.dataset.addPocket);
     if(t.dataset.reconcileAccount)return reconcileAccount(t.dataset.reconcileAccount);
     if(t.dataset.reconcilePocket)return reconcilePocket(t.dataset.reconcilePocket);
-    
-    // Aksi Hapus/Lunas/Jual
     if(t.dataset.sellGold) return sellGold(t.dataset.sellGold);
     
     if(t.dataset.delAsset){
