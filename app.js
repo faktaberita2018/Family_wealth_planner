@@ -28,13 +28,27 @@ function goal(id){return S.cache.goals.find(x=>x.id===id)}
 function source(id){return pocket(id)||acct(id)}
 function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 
-// --- KALKULASI NET WORTH ---
+// --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
-function totalGoldValue(){ return S.cache.goldItems.reduce((a,x)=>a+(n(x.weight)*n(setting().goldPrice)),0) }
+function totalGoldValue(){ return S.cache.goldItems.filter(x=>x.status!=='sold').reduce((a,x)=>a+(n(x.weight)*n(setting().goldPrice)),0) }
 function totalAssetValue(){ return S.cache.assets.reduce((a,x)=>a+n(x.value),0) }
 function totalPiutang(){ return S.cache.debts.filter(x=>x.type==='piutang'&&x.status==='active').reduce((a,x)=>a+n(x.amount),0) }
 function totalUtang(){ return S.cache.debts.filter(x=>x.type==='utang'&&x.status==='active').reduce((a,x)=>a+n(x.amount),0) }
 function netWorth(){ return totalAccountBalance() + totalGoldValue() + totalAssetValue() + totalPiutang() - totalUtang() }
+
+function getRunway() {
+    // Ambil plan bulan ini untuk hitung pengeluaran
+    let p = plan();
+    let it = p ? items(p.id) : [];
+    let monthlyExpense = it.filter(x => !['Saving','Sinking Fund'].includes(x.category)).reduce((a, x) => a + n(x.amount), 0);
+    
+    // Jika belum ada plan, pakai asumsi default Rp 10.000.000
+    if (monthlyExpense === 0) monthlyExpense = 10000000; 
+
+    let liquid = totalAccountBalance() + totalGoldValue();
+    let months = liquid / monthlyExpense;
+    return { months: months.toFixed(1), monthlyExpense, liquid };
+}
 
 function pocketAllocated(aid){return S.cache.pockets.filter(x=>x.accountId===aid).reduce((a,x)=>a+n(x.balance),0)}
 function unallocated(a){return n(a.balance)-pocketAllocated(a.id)}
@@ -50,9 +64,17 @@ function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('activ
 // --- HALAMAN BERANDA ---
 function home(){
     let p=plan(),ps=pstats(p),g=S.cache.goals.filter(x=>!['archived','cancelled'].includes(x.status)).sort((a,b)=>a.priority-b.priority).slice(0,3);
+    let runway = getRunway();
     return `<div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c)">
-        <div class="eyebrow">Total Kekayaan Bersih Banget</div>
+        <div class="eyebrow">Total Kekayaan Bersih</div>
         <h1>${money(netWorth())}</h1>
+        <div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:12px;margin:15px 0;display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">🚀</span>
+            <div>
+                <small style="color:#c0c9c1;display:block">Setara Pengeluaran</small>
+                <b>${runway.months} Bulan</b> <small style="color:#c0c9c1">dari aset likuid</small>
+            </div>
+        </div>
         <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
             <span>💵 Kas: ${money(totalAccountBalance())}</span>
             <span>🧈 Emas: ${money(totalGoldValue())}</span>
@@ -73,7 +95,7 @@ function home(){
 function goalRow(g){let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="row"><span style="font-size:24px">${g.icon||'🎯'}</span><div class="grow"><b>${esc(g.name)}</b><div class="progress" style="margin:6px 0"><i style="width:${pc}%"></i></div><small class="muted">${money(x)} · ${pc.toFixed(1)}%</small></div></div>`}
 function planView(){let p=plan(),ps=pstats(p);return `<div class="section"><div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo rekening.</span></div><button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button></div><div class="monthbar"><button class="icon" data-action="prevMonth">‹</button><b>${monthName(S.month)}</b><button class="icon" data-action="nextMonth">›</button></div>${p?`<div class="grid four" style="margin-top:15px"><div class="card kpi"><span class="muted small">Pendapatan</span><b>${money(ps.income)}</b><button class="btn ghost" data-action="addIncome">＋ Income</button></div><div class="card kpi"><span class="muted small">Alokasi</span><b>${money(ps.alloc)}</b></div><div class="card kpi"><span class="muted small">Dana Disiapkan</span><b>${money(ps.funded)}</b></div><div class="card kpi"><span class="muted small">Sisa/Minus</span><b class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</b></div></div><div class="section"><div><h2>Daftar alokasi</h2><span class="muted">Status funded dapat hanya penanda atau transfer.</span></div><div><button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button> <button class="btn dark" data-action="closing">Tutup Bulan</button></div></div><div class="card">${items(p.id).length?items(p.id).map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">${esc(x.category)} · ${x.fundingMode==='transfer'?'Transfer saldo':'Penanda saja'}</small></div><div style="text-align:right"><b>${money(x.amount)}</b><br><button class="fund ${x.fundingStatus}" data-fund="${x.id}">${x.fundingStatus==='funded'?'Dana Disiapkan':'Direncanakan'}</button> <button class="icon" data-remove-item="${x.id}">×</button></div></div>`).join(''):'<div class="empty">Belum ada pos.</div>'}</div>`:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`}
 
-// --- HALAMAN KEKAYAAN (UPGRADE) ---
+// --- HALAMAN KEKAYAAN ---
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
     <div class="tabs">
@@ -90,7 +112,7 @@ function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><
 
 function accountsView(){return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div><div class="grid two">${S.cache.institutions.map(i=>`<div class="card"><div style="display:flex;justify-content:space-between"><div><b>${esc(i.name)}</b><small class="muted">${esc(i.type)}</small></div><button class="btn ghost" data-add-account="${i.id}">＋ Rekening</button></div>${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{let pa=S.cache.pockets.filter(p=>p.accountId===a.id),alloc=pocketAllocated(a.id),ua=unallocated(a);return `<div style="margin-top:15px"><div class="row"><div class="grow"><b>${esc(a.name)}</b>${a.isMain?'<span class="badge green">Utama</span>':''}<small class="muted">Saldo aktual · Kantong ${money(alloc)} · Bebas ${money(ua)}</small></div><b>${money(a.balance)}</b><button class="icon" data-reconcile-account="${a.id}">✎</button><button class="icon" data-add-pocket="${a.id}">＋</button></div>${ua<0?'<div class="warning small">Total kantong melebihi saldo rekening. Lakukan rekonsiliasi.</div>':''}${pa.map(p=>`<div class="row" style="margin-left:17px"><div class="grow"><b>↳ ${esc(p.name)}</b><small class="muted">Alokasi dalam rekening</small></div><b>${money(p.balance)}</b><button class="icon" data-reconcile-pocket="${p.id}">✎</button></div>`).join('')}</div>`}).join('')||'<div class="empty">Belum ada rekening.</div>'}</div>`).join('')}</div>`}
 
-// --- MODUL EMAS ---
+// --- MODUL EMAS (Update Fitur Jual & Owner) ---
 function goldView() {
     let gp = setting().goldPrice;
     return `<div class="section">
@@ -98,26 +120,33 @@ function goldView() {
         <button class="btn primary" data-action="addGold">＋ Emas</button>
     </div>
     <div class="grid three">
-        ${S.cache.goldItems.map(g=>{
+        ${S.cache.goldItems.filter(g=>g.status!=='sold').map(g=>{
             let val = n(g.weight) * gp;
+            let profit = val - n(g.buyPrice);
+            let profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
             return `<div class="card">
-                <div style="display:flex;justify-content:space-between">
+                <div style="display:flex;justify-content:space-between;align-items:center">
                     <span class="badge orange">${esc(g.brand)}</span>
-                    <b>${n(g.weight)} gr</b>
+                    <span class="badge blue" style="font-size:10px">${g.owner || 'Milik Sendiri'}</span>
                 </div>
                 <h3 style="margin:10px 0">${esc(g.name)}</h3>
-                <small class="muted">Beli: ${money(g.buyPrice)}</small>
-                <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
-                    <small class="muted">Estimasi Nilai</small>
-                    <b style="display:block;font-size:18px;color:var(--green)">${money(val)}</b>
+                <div style="display:flex;justify-content:space-between">
+                    <small class="muted">Beli: ${money(g.buyPrice)}</small>
+                    <b>${n(g.weight)} gr</b>
                 </div>
-                <button class="btn red" style="margin-top:10px;width:100%" data-del-gold="${g.id}">Jual/Hapus</button>
+                <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+                    <div style="display:flex;justify-content:space-between">
+                        <small class="muted">Nilai Pasar</small>
+                        <b style="color:${profitColor}">${money(val)}</b>
+                    </div>
+                </div>
+                <button class="btn dark" style="margin-top:10px;width:100%" data-sell-gold="${g.id}">Jual Emas</button>
             </div>`
         }).join('')||'<div class="card empty">Belum ada emas tercatat.</div>'}
     </div>`
 }
 
-// --- MODUL ASET TETAP ---
+// --- MODUL ASET TETAP (Update Owner) ---
 function assetsView() {
     return `<div class="section">
         <div><h2>Aset Tetap</h2><span class="muted">Kendaraan, Properti, Elektronik.</span></div>
@@ -126,7 +155,10 @@ function assetsView() {
     <div class="grid three">
         ${S.cache.assets.map(a=>`
             <div class="card">
-                <span class="badge blue">${esc(a.category)}</span>
+                <div style="display:flex;justify-content:space-between">
+                    <span class="badge blue">${esc(a.category)}</span>
+                    <span class="badge" style="font-size:10px">${a.owner || 'Bersama'}</span>
+                </div>
                 <h3 style="margin:10px 0">${esc(a.name)}</h3>
                 <small class="muted">Beli: ${money(a.buyPrice)}</small>
                 <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
@@ -214,7 +246,7 @@ async function seed(){
     for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Kas'}])await FWPDB.put('institutions',x)
 }
 
-// --- FITUR CRUD MODAL BARU ---
+// --- FITUR CRUD MODAL ---
 async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name','text','Rencana '+monthName(S.month)),async()=>{await FWPDB.put('plans',{id:id('pl'),month:S.month,name:v('x_name'),status:'open',createdAt:dateNow()});closeModal();await refresh();toast('Rencana dibuat')})}
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
@@ -245,7 +277,7 @@ async function addGoal(){
 }
 
 async function allocateGoal(gid){
-    modal('Alokasikan Saldo ke Tujuan',`<div class="formgrid"><div class="field"><label>Sumber saldo</label><select id="x_source" class="input">${sourceOpts()}</select></div>${f('Nominal alokasi','x_amount','number')}</div><div class="info small" style="margin-top:12px">Ini virtual earmark. Saldo tidak berpindah dan kekayaan tidak bertambah. Total alokasi pada satu sumber tidak boleh melebihi saldo yang tersedia.</div>`,async()=>{
+    modal('Alokasikan Saldo ke Tujuan',`<div class="formgrid"><div class="field"><label>Sumber saldo</label><select id="x_source" class="input">${sourceOpts()}</select></div>${f('Nominal alokasi','x_amount','number')}</div><div class="info small" style="margin-top:12px">Ini virtual earmark. Saldo tidak berpindah dan kekayaan tidak bertambah.</div>`,async()=>{
         let sid=v('x_source'),amount=n(v('x_amount')),src=source(sid);
         if(!src||!amount)return toast('Lengkapi data');
         let used=S.cache.goalAllocations.filter(x=>x.sourceId===sid&&x.status==='active').reduce((a,x)=>a+n(x.amount),0);
@@ -262,18 +294,54 @@ async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f(
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
 
-// --- CRUD EMAS, ASET, UTANG BARU ---
+// --- CRUD EMAS, ASET, UTANG ---
 async function addGold(){
     modal('Tambah Emas', `<div class="formgrid">
         ${f('Nama / Keterangan','x_name','text','Cincin Antam')}
         ${f('Merek','x_brand','text','Antam')}
         ${f('Berat (Gram)','x_weight','number','1')}
         ${f('Harga Beli (Rp)','x_price','number','0')}
+        <div class="field"><label>Pemilik</label><select id="x_owner" class="input"><option>Milik Sendiri</option><option>Istri</option><option>Suami</option><option>Bersama</option></select></div>
     </div>`, async()=>{
         if(!v('x_name')||!n(v('x_weight')))return toast('Lengkapi data');
-        await FWPDB.put('goldItems',{id:id('gd'),name:v('x_name'),brand:v('x_brand'),weight:n(v('x_weight')),buyPrice:n(v('x_price')),createdAt:dateNow()});
+        await FWPDB.put('goldItems',{id:id('gd'),name:v('x_name'),brand:v('x_brand'),weight:n(v('x_weight')),buyPrice:n(v('x_price')),owner:v('x_owner'),status:'active',createdAt:dateNow()});
         closeModal();await refresh();toast('Emas ditambahkan');
     });
+}
+
+async function sellGold(id) {
+    let g = await FWPDB.get('goldItems', id);
+    if(!g || g.status === 'sold') return;
+    
+    modal('Jual Emas', `<div class="info small" style="margin-bottom:12px">Anda akan menjual <b>${esc(g.name)}</b> seberat ${n(g.weight)} gram.</div>
+        <div class="formgrid">
+            ${f('Harga Jual Total (Rp)','x_sell_price','number', String(n(g.weight)*n(setting().goldPrice)))}
+            <div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${S.cache.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
+        </div>`, async()=>{
+            let sellPrice = n(v('x_sell_price'));
+            let accId = v('x_account');
+            if(!sellPrice || !accId) return toast('Lengkapi data');
+            
+            let profit = sellPrice - n(g.buyPrice);
+            
+            try {
+                // 1. Tambah saldo ke rekening
+                await alterSource(accId, sellPrice, 'Hasil Jual Emas: ' + g.name, {goldId: g.id, profit: profit});
+                
+                // 2. Ubah status emas jadi terjual
+                g.status = 'sold';
+                g.soldPrice = sellPrice;
+                g.soldProfit = profit;
+                g.soldAt = dateNow();
+                await FWPDB.put('goldItems', g);
+                
+                closeModal();
+                await refresh();
+                toast(`Emas terjual. ${profit >= 0 ? 'Untung' : 'Rugi'} ${money(Math.abs(profit))}`);
+            } catch (e) {
+                toast(e.message);
+            }
+        });
 }
 
 async function addAsset(){
@@ -282,9 +350,10 @@ async function addAsset(){
         <div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Kendaraan</option><option>Properti</option><option>Elektronik</option><option>Lainnya</option></select></div>
         ${f('Harga Beli (Rp)','x_buy','number','0')}
         ${f('Nilai Saat Ini (Rp)','x_val','number','0')}
+        <div class="field"><label>Pemilik</label><select id="x_owner" class="input"><option>Bersama</option><option>Suami</option><option>Istri</option></select></div>
     </div>`, async()=>{
         if(!v('x_name')||!n(v('x_val')))return toast('Lengkapi data');
-        await FWPDB.put('assets',{id:id('as'),name:v('x_name'),category:v('x_cat'),buyPrice:n(v('x_buy')),value:n(v('x_val')),createdAt:dateNow()});
+        await FWPDB.put('assets',{id:id('as'),name:v('x_name'),category:v('x_cat'),buyPrice:n(v('x_buy')),value:n(v('x_val')),owner:v('x_owner'),createdAt:dateNow()});
         closeModal();await refresh();toast('Aset ditambahkan');
     });
 }
@@ -403,12 +472,9 @@ document.addEventListener('click',async e=>{
     if(t.dataset.reconcileAccount)return reconcileAccount(t.dataset.reconcileAccount);
     if(t.dataset.reconcilePocket)return reconcilePocket(t.dataset.reconcilePocket);
     
-    // Aksi Hapus/Lunas
-    if(t.dataset.delGold){
-        if(confirm('Hapus catatan emas ini? (Pastikan Anda sudah mencatat uang penjualannya ke rekening)')) {
-            await FWPDB.del('goldItems', t.dataset.delGold); await refresh();
-        }
-    }
+    // Aksi Hapus/Lunas/Jual
+    if(t.dataset.sellGold) return sellGold(t.dataset.sellGold);
+    
     if(t.dataset.delAsset){
         if(confirm('Hapus aset ini?')) { await FWPDB.del('assets', t.dataset.delAsset); await refresh(); }
     }
