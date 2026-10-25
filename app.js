@@ -1028,31 +1028,122 @@ async function transfer(){
         });
 }
 
-// === REVISI: TUTUP BULAN DENGAN INSTRUKSI & LAYOUT BARU ===
+// === REVISI: TUTUP BULAN DENGAN STICKY SUMMARY & AKTUAL TERPAKAI ===
+window.recalcClosing = function() {
+    let p=plan(); if(!p) return;
+    let ps=pstats(p), it=items(p.id);
+    let totalActual = 0;
+    
+    it.forEach(x => {
+        let act = n(v('act_' + x.id));
+        totalActual += act;
+        
+        // Update per-item status
+        let diff = x.amount - act;
+        let statusEl = document.getElementById('status_' + x.id);
+        if (statusEl) {
+            if (diff > 0) statusEl.innerHTML = `<span class="positive">Sisa ${money(diff)}</span>`;
+            else if (diff < 0) statusEl.innerHTML = `<span class="negative">Boncos ${money(Math.abs(diff))}</span>`;
+            else statusEl.innerHTML = `<span class="muted">Pas</span>`;
+        }
+    });
+    
+    let netCash = ps.income - totalActual;
+    
+    let sumActualEl = document.getElementById('sum_actual');
+    if (sumActualEl) sumActualEl.textContent = money(totalActual);
+    
+    let sumNetEl = document.getElementById('sum_net');
+    if (sumNetEl) {
+        sumNetEl.textContent = money(netCash);
+        sumNetEl.className = netCash < 0 ? 'negative' : 'positive';
+    }
+    
+    // Update dropdown options
+    let actionSelect = document.getElementById('x_action');
+    if (actionSelect) {
+        let currentVal = actionSelect.value;
+        let isCurrentlyDeficit = currentVal && currentVal.startsWith('deficit');
+        let shouldBeDeficit = netCash < 0;
+        
+        if (isCurrentlyDeficit !== shouldBeDeficit) {
+            let optionsHtml = shouldBeDeficit 
+                ? '<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
+                : '<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>';
+            actionSelect.innerHTML = optionsHtml;
+        }
+    }
+};
+
 async function closing(){
     let p=plan(),ps=pstats(p),set=setting(),it=items(p.id);
     
     let rows = set.budgetMode==='simple' 
         ? '<div class="info">Mode Ringkas: seluruh alokasi dianggap terpakai. Kamu hanya perlu menangani Sisa Rencana atau Minus.</div>' 
-        : `<div class="info small" style="margin-bottom:12px">Masukkan sisa uang dari pos ini yang <b>tidak terpakai</b>. Kosongkan atau isi 0 jika uangnya habis terpakai.</div>` +
-          it.map(x=>`
+        : `
+          <div class="sticky-summary">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <span class="muted small">Total Rencana</span>
+                  <b id="sum_plan" class="small">${money(ps.alloc)}</b>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                  <span class="muted small">Total Aktual</span>
+                  <b id="sum_actual" class="small">${money(ps.alloc)}</b>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-top:1px dashed var(--border); padding-top:8px;">
+                  <span style="font-weight:800; font-size:14px;">Kas Bersih (Sisa)</span>
+                  <b id="sum_net" style="font-size:14px;" class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</b>
+              </div>
+          </div>
+          <div class="info small" style="margin-bottom:12px">Masukkan uang yang <b>aktual terpakai</b>. Kolom sudah otomatis terisi sesuai Rencana.</div>
+          ` + it.map(x=>`
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; border-bottom:1px solid var(--border);">
                 <div style="flex:1; min-width:0;">
                     <b style="display:block; font-size:14px; line-height:1.3; word-break:break-word;">${esc(x.name)}</b>
                     <small class="muted">Plan: ${money(x.amount)}</small>
+                    <div id="status_${x.id}" class="small" style="margin-top:4px;"></div>
                 </div>
-                <div style="width:130px; flex-shrink:0;">
-                    <input class="input" id="rem_${x.id}" type="text" inputmode="numeric" value="0" placeholder="Sisa" style="padding:8px 10px; min-height:36px; font-size:14px;">
+                <div style="width:140px; flex-shrink:0;">
+                    <input class="input" id="act_${x.id}" type="text" inputmode="numeric" value="${formatNum(x.amount)}" placeholder="Aktual" style="padding:8px 10px; min-height:36px; font-size:14px; text-align:right;" oninput="recalcClosing()">
                 </div>
             </div>
           `).join('');
     
-    modal('Tutup Bulan',`${rows}<div class="card" style="margin-top:13px; padding:12px;"><b>Sisa Rencana: <span class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</span></b></div><div class="formgrid" style="margin-top:13px"><div class="field"><label>Tindakan</label><select id="x_action" class="input">${ps.surplus<0?'<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>':'<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>'}</select></div><div class="field"><label>Tujuan/Rekening opsional</label><select id="x_target" class="input"><option value="">Pilih</option>${S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}${[...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('')}</select></div></div>`,async()=>{
-        let remain=0;if(set.budgetMode!=='simple')it.forEach(x=>remain+=n(v('rem_'+x.id)));
-        let closeAmount=ps.surplus+remain,action=v('x_action'),target=v('x_target');
-        p.status='closed';p.closedAt=dateNow();p.closing={plannedSurplus:ps.surplus,reportedRemain:remain,finalAmount:closeAmount,action,target};
+    let isInitialDeficit = ps.surplus < 0;
+    let optionsHtml = isInitialDeficit 
+        ? '<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
+        : '<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>';
+
+    modal('Tutup Bulan', `${rows}<div class="formgrid" style="margin-top:13px">
+        <div class="field"><label>Tindakan</label>
+            <select id="x_action" class="input">${optionsHtml}</select>
+        </div>
+        <div class="field"><label>Tujuan/Rekening opsional</label>
+            <select id="x_target" class="input"><option value="">Pilih</option>${S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}${[...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('')}</select>
+        </div>
+    </div>`, async()=>{
+        let totalActual=0;
+        if(set.budgetMode!=='simple') {
+            it.forEach(x => totalActual += n(v('act_'+x.id)));
+        } else {
+            totalActual = ps.alloc;
+        }
+        
+        let closeAmount = ps.income - totalActual;
+        let action = v('x_action'), target = v('x_target');
+        
+        p.status='closed'; p.closedAt=dateNow(); 
+        p.closing={
+            plannedIncome: ps.income,
+            plannedAlloc: ps.alloc,
+            totalActual: totalActual,
+            finalAmount: closeAmount,
+            action, target
+        };
         await FWPDB.put('plans',p);
-        let next=new Date(S.month+'-01');next.setMonth(next.getMonth()+1);let nextMonth=next.toISOString().slice(0,7);
+        
+        let next=new Date(S.month+'-01'); next.setMonth(next.getMonth()+1); let nextMonth=next.toISOString().slice(0,7);
+        
         if(action==='carry'||action==='deficit_carry'){
             let np=S.cache.plans.find(x=>x.month===nextMonth);
             if(!np){np={id:id('pl'),month:nextMonth,name:'Rencana '+monthName(nextMonth),status:'open',createdAt:dateNow()};await FWPDB.put('plans',np)}
@@ -1065,7 +1156,10 @@ async function closing(){
         }
         await ledger('closing','Tutup bulan '+monthName(S.month),closeAmount,{planId:p.id,action,target},false);
         closeModal();await refresh();toast('Bulan ditutup')
-    })
+    });
+
+    // Trigger kalkulasi awal
+    setTimeout(() => recalcClosing(), 10);
 }
 
 async function copyPlan(){
