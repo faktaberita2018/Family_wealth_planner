@@ -192,7 +192,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
 .field.full{grid-column:1/-1}
 .field label{font-size:12px;font-weight:700;color:var(--muted)}
 .input{width:100%;border:1px solid var(--border-strong);background:var(--bg);color:var(--text);
-  border-radius:var(--r-sm);padding:10px 12px;font-size:15px;min-height:42px}
+  border-radius:var(--r-sm);padding:10px 12px;font-size:16px;min-height:42px}
 .input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
 
 .choice{display:grid;gap:8px}
@@ -256,4 +256,10 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
 @media(max-width:380px){
   #nav{height:60px}
   #nav .add{width:44px;height:44px;font-size:20px}
+}
+/* Mencegah iOS Auto-Zoom pada semua form input */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
 }
