@@ -1,37 +1,37 @@
 export default async function handler(req, res) {
   try {
-    // Tambahkan User-Agent agar tidak diblokir
-    const response = await fetch('https://pegadaian.co.id/harga-emas', {
+    const response = await fetch('https://thepalacejeweler.com/today-gold-price', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
-    
     const html = await response.text();
 
-    // Regex lebih fleksibel: Mencari kata "Jual Emas" lalu mengambil angka Rp pertama setelahnya
-    const match = html.match(/Jual Emas[\s\S]*?Rp\s*([\d\.]+)/i);
-    
-    let hargaBuybackPerGram = 0;
-    
-    if (match && match[1]) {
-      // Hapus titik (jika ada) dan ubah ke angka
-      const angkaMentah = parseFloat(match[1].replace(/\./g, ''));
-      
-      // Jika angka di bawah 100.000 (misal 23.150), berarti itu harga per 0,01 gr. Kalikan 100.
-      // Jika angkanya sudah besar (misal 2.315.000), berarti sudah per gram.
-      hargaBuybackPerGram = angkaMentah < 100000 ? angkaMentah * 100 : angkaMentah;
-    }
+    // Regex untuk mencari angka buyback (kolom BELI)
+    // 24K: Mencari pola "24K(99,9%) ... angka"
+    const match24 = html.match(/24K\(99,9%\)[\s\S]*?(\d{3,4})/i);
+    // 18K: Mencari pola "18K(75%) ... angka"
+    const match18 = html.match(/18K\(75%\)[\s\S]*?(\d{3,4})/i);
+    // 9K: Mencari pola "9K(37,5%) ... angka" (mengambil harga buyback pertama)
+    const match9 = html.match(/9K\(37,5%\)[\s\S]*?(\d{3,4})/i);
 
-    // Jika gagal dapat angka, kirim status gagal
-    if (hargaBuybackPerGram === 0) {
-      throw new Error('Gagal menemukan harga di halaman Pegadaian');
+    // Konversi dari ribuan ke Rupiah penuh (contoh: 2269 -> 2.269.000)
+    const harga24K = match24 ? parseFloat(match24[1]) * 1000 : 0;
+    const harga18K = match18 ? parseFloat(match18[1]) * 1000 : 0;
+    const harga9K = match9 ? parseFloat(match9[1]) * 1000 : 0;
+
+    if (harga24K === 0 && harga18K === 0 && harga9K === 0) {
+      throw new Error('Gagal menemukan harga di halaman The Palace');
     }
 
     res.status(200).json({
       success: true,
       timestamp: new Date().toISOString(),
-      pegadaian: { jualPerGram: hargaBuybackPerGram }
+      palace: {
+        '24K': harga24K,
+        '18K': harga18K,
+        '9K': harga9K
+      }
     });
 
   } catch (error) {
