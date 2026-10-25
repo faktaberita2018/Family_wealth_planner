@@ -173,12 +173,11 @@ function getSourceStatus(src){
     };
 }
 
-// FUNGSI HARGA ACUAN EMAS (Untuk valuasi aset)
 function getCurrentGoldPrice() {
     const s = setting();
     if(n(s.goldPrices?.pegadaian) > 0) return n(s.goldPrices.pegadaian);
     if(n(s.palacePrices?.['24K']) > 0) return n(s.palacePrices['24K']);
-    return 2000000; // Fallback default
+    return 2000000; 
 }
 
 function acct(id){return S.cache.accounts.find(x=>x.id===id)}
@@ -190,7 +189,6 @@ function ownerName(oid){return S.cache.owners.find(x=>x.id===oid)?.name||'Tidak 
 
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
 
-// === PERHITUNGAN ASET BARU ===
 function totalGoldDigitalValue(){
     return S.cache.goldAccounts.reduce((a,x)=> a + (n(x.balanceGrams) * getCurrentGoldPrice()), 0);
 }
@@ -232,26 +230,23 @@ function pstats(p){
     return{income,alloc,surplus:income-alloc,funded:it.filter(x=>x.fundingStatus==='funded').reduce((a,x)=>a+n(x.amount),0)}
 }
 
-// === ALOKASI TUJUAN ===
 function getGoalAllocations(gid) {
     return S.cache.goalAllocations.filter(x=>x.goalId===gid && x.status==='active');
 }
 
 function getSourceAllocated(sourceId) {
-    // Total alokasi yang sudah dipakai dari suatu sumber (Bank, Pocket, Emas)
     return S.cache.goalAllocations.filter(x=>x.sourceId===sourceId && x.status==='active').reduce((a,x)=>a+n(x.amount), 0);
 }
 
 function goalValue(gid){
     return getGoalAllocations(gid).reduce((a, x) => {
         if (x.type === 'gram') {
-            return a + (n(x.amount) * getCurrentGoldPrice()); // Konversi gram ke Rp untuk progres
+            return a + (n(x.amount) * getCurrentGoldPrice());
         }
         return a + n(x.amount);
     }, 0);
 }
 
-// === RENDER UTAMA ===
 function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,more:more}[S.page];$('#view').innerHTML=fn()}
 function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===S.page))}
 
@@ -327,7 +322,6 @@ function planView(){
     `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
 }
 
-// === MENU KEKAYAAN ===
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
     <div class="tabs">
@@ -435,12 +429,13 @@ function accountsView(){
     </div>`;
 }
 
-// === UI EMAS BARU ===
+// === UI EMAS BARU (REVISI TATA LETAK) ===
 function goldView(){
-    const peg=getSourceStatus('pegadaian');
-    const pal=getSourceStatus('palace');
-    
     if(!S.goldTab) S.goldTab = 'digital';
+
+    let btnText = "＋ Tambah Akun Digital";
+    if(S.goldTab === 'physical') btnText = "＋ Tambah Kepingan Fisik";
+    if(S.goldTab === 'jewelry') btnText = "＋ Tambah Perhiasan";
 
     let content = '';
     if(S.goldTab === 'digital') {
@@ -450,7 +445,7 @@ function goldView(){
                     let val = n(acc.balanceGrams) * getCurrentGoldPrice();
                     let modal = n(acc.avgCost) * n(acc.balanceGrams);
                     let pl = val - modal;
-                    let avail = n(acc.balanceGrams) - (getSourceAllocated(acc.id) / getCurrentGoldPrice()); // Sisa gram belum dialokasikan
+                    let avail = n(acc.balanceGrams) - (getSourceAllocated(acc.id) / getCurrentGoldPrice());
                     
                     return `<div class="card" style="border-top:4px solid var(--orange)">
                         <div style="display:flex; justify-content:space-between">
@@ -478,7 +473,7 @@ function goldView(){
                             <button class="btn ghost" style="flex:1" data-sell-gold-digital="${acc.id}">Jual</button>
                         </div>
                     </div>`;
-                }).join('') || '<div class="empty">Belum ada akun emas digital.</div>'}
+                }).join('') || '<div class="empty" style="grid-column:1/-1">Belum ada akun emas digital.</div>'}
             </div>
         `;
     } else if (S.goldTab === 'physical') {
@@ -527,60 +522,38 @@ function goldView(){
         `;
     }
 
-    return `<div class="section">
-        <div><h2>Aset Emas</h2><span class="muted small">Harga acuan: ${money(getCurrentGoldPrice())}/gr</span></div>
+    // Ringkasan status sync mini
+    const peg = getSourceStatus('pegadaian');
+    const pal = getSourceStatus('palace');
+    const hasError = peg.lastError || pal.lastError;
+    const errorMsg = hasError ? `<div class="warning small" style="margin-top:10px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+        <span>⚠️ Gagal sinkronisasi harga terbaru.</span>
+        <button class="btn ghost small" data-action="syncGold" style="border:0; padding:0;">Coba lagi</button>
+    </div>` : '';
+
+    return `<div class="section" style="margin-bottom:10px">
+        <div>
+            <h2>Aset Emas</h2>
+            <span class="muted small">Harga acuan: <b>${money(getCurrentGoldPrice())}</b>/gr</span>
+        </div>
         <div class="row-actions">
-            <button class="btn ghost" data-action="syncGold">🔄 Sync</button>
-            <button class="btn ghost" data-action="setGoldPrice">✎ Harga</button>
-            <button class="btn primary" data-action="addGold">＋ Tambah</button>
+            <button class="icon" data-action="setGoldPrice" title="Input Harga Manual">🏷️</button>
+            <button class="icon" data-action="syncGold" title="Tarik Harga Otomatis">🔄</button>
         </div>
     </div>
-    <div class="grid two">${sourceCard('pegadaian', peg)}${sourceCard('palace', pal)}</div>
     
-    <div class="tabs" style="margin-top:20px">
+    ${errorMsg}
+
+    <div class="tabs" style="margin-top:15px">
         <button class="tab ${S.goldTab==='digital'?'active':''}" data-goldtab="digital">Digital</button>
         <button class="tab ${S.goldTab==='physical'?'active':''}" data-goldtab="physical">Fisik (LM)</button>
         <button class="tab ${S.goldTab==='jewelry'?'active':''}" data-goldtab="jewelry">Perhiasan</button>
     </div>
+
+    <button class="btn primary" style="width:100%; margin-top:15px;" data-action="addGold">${btnText}</button>
+
     ${content}
     `;
-}
-
-// === FUNGSI UI PENDUKUNG ===
-function sourceCard(src, status){
-    const sourceBadge = status.priceSource==='manual'
-        ? `<span class="badge purple">Manual</span>`
-        : status.lastSuccess ? `<span class="badge green">Auto</span>` : `<span class="badge">—</span>`;
-    const info = status.lastSuccess
-        ? `Terakhir: ${formatDateTime(status.lastSuccess)}`
-        : 'Belum pernah diperbarui';
-    const errBlock = status.lastError
-        ? `<div class="warning small" style="margin-top:8px">⚠ ${esc(status.lastError.message||'Gagal')}<br><span class="muted">${formatDateTime(status.lastError.at)}</span></div>`
-        : '';
-    if(src==='pegadaian'){
-        return `<div class="card">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-                <b>Pegadaian</b>${sourceBadge}
-            </div>
-            <small class="muted" style="display:block;margin-top:4px">${info}</small>
-            <div style="margin-top:10px">
-                <b style="font-size:clamp(16px,4vw,20px)">${status.price>0?money(status.price)+' / gr':'<span class="muted">— Belum diatur</span>'}</b>
-            </div>
-            ${errBlock}
-        </div>`;
-    }
-    const p = status.prices||{'24K':0,'18K':0,'9K':0};
-    const row = (k,val)=>`<div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px">
-        <span class="small muted">${k}</span>
-        <b class="small">${val>0?money(val):'—'}</b></div>`;
-    return `<div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-            <b>The Palace</b>${sourceBadge}
-        </div>
-        <small class="muted" style="display:block;margin-top:4px">${info}</small>
-        <div style="margin-top:8px">${row('24K',p['24K'])}${row('18K',p['18K'])}${row('9K',p['9K'])}</div>
-        ${errBlock}
-    </div>`;
 }
 
 function assetsView() {
@@ -666,7 +639,6 @@ async function alterSource(sid,delta,label,meta={}){
 
 function sourceOpts(selected=''){return [...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="${x.id}" ${selected===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}
 
-// === OWNERS (KEPEMILIKAN) ===
 async function manageOwners() {
     let rows = S.cache.owners.map(o => `
         <div class="row">
@@ -724,7 +696,6 @@ async function delOwner(oid) {
     manageOwners();
 }
 
-// === SEEDING ===
 async function seed(){
     let set=await FWPDB.get('settings','main');
     if(!set) {
@@ -747,7 +718,6 @@ async function seed(){
     }
 }
 
-// === FORM BUILDERS & MODAL ACTIONS ===
 function ownerOpts(selected=''){return S.cache.owners.map(o=>`<option value="${o.id}" ${selected===o.id?'selected':''}>${esc(o.name)}</option>`).join('')}
 
 async function addGold(){
@@ -835,7 +805,6 @@ async function sellGoldDigital(accId) {
     let acc = S.cache.goldAccounts.find(x=>x.id===accId);
     if(n(acc.balanceGrams) <= 0) return toast('Saldo emas kosong');
     
-    // Cek alokasi
     let alloc = getSourceAllocated(accId);
     let allocGram = alloc / getCurrentGoldPrice();
 
@@ -905,7 +874,6 @@ async function sellGoldJewelry(gid) {
     });
 }
 
-// === GOALS & ALLOCATIONS ===
 async function addGoal(){
     modal('Buat Tujuan',`<div class="formgrid">${f('Nama','x_name')}${f('Ikon','x_icon','text','🎯')}${f('Target','x_target','number')}${f('Target tanggal','x_date','date')}${f('Prioritas','x_priority','number',String(S.cache.goals.length+1))}</div>`,async()=>{
         if(!v('x_name')||!n(v('x_target')))return toast('Nama dan target wajib');
@@ -915,7 +883,6 @@ async function addGoal(){
 }
 
 async function allocateGoal(gid){
-    // Dapatkan sumber yang tersedia
     let accs = S.cache.accounts.map(a=>({id:a.id, type:'bank', name:a.name, avail:a.balance}));
     let pocks = S.cache.pockets.map(p=>({id:p.id, type:'pocket', name:p.name, avail:p.balance}));
     let goldAcc = S.cache.goldAccounts.map(g=>({id:g.id, type:'gold_digital', name:g.name, avail:g.balanceGrams * getCurrentGoldPrice(), unit:'gram'}));
@@ -938,7 +905,6 @@ async function allocateGoal(gid){
         
         if(!sid || !amount) return toast('Lengkapi data');
 
-        // Validasi ketersediaan
         let totalAllocated = getSourceAllocated(sid);
         let maxAvail = 0;
         if(type === 'bank') maxAvail = acct(sid).balance;
@@ -955,14 +921,13 @@ async function allocateGoal(gid){
 
         await FWPDB.put('goalAllocations', {
             id: id('ga'), goalId: gid, sourceId: sid, type: type, 
-            amount: amount, // Simpan angka asli (gram atau Rp)
+            amount: amount, 
             status: 'active', createdAt: dateNow()
         });
         closeModal(); await refresh(); toast('Alokasi berhasil');
     });
 }
 
-// === LAINNYA ===
 async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name','text','Rencana '+monthName(S.month)),async()=>{await FWPDB.put('plans',{id:id('pl'),month:S.month,name:v('x_name'),status:'open',createdAt:dateNow()});closeModal();await refresh();toast('Rencana dibuat')})}
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
@@ -1092,7 +1057,6 @@ async function delPocket(pid) {
     await FWPDB.del('pockets', pid); await refresh(); toast('Kantong dihapus');
 }
 
-// === KALKULASI & UTILS PENTING ===
 async function fetchWithTimeout(url, opts={}, ms=12000){
     const ctrl=new AbortController();
     const timer=setTimeout(()=>ctrl.abort(), ms);
