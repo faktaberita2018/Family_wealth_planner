@@ -2,29 +2,25 @@ const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),pr
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-// === FIX TOTAL: Fungsi n() yang kompatibel dengan semua iOS/Android ===
+// === FIX TOTAL: Otak Pembaca Angka (Handle 530.0000) ===
 const n=v=>{
     if (typeof v === 'number') return v;
     if (!v) return 0;
     let str = String(v).trim();
     if (!str) return 0;
-    // Hapus semua karakter selain angka, titik, koma, minus
     str = str.replace(/[^\d.,-]/g, ''); 
     
     if (str.includes(',')) {
-        // Jika ada koma, anggap desimal Indonesia (misal 1.500,50)
         str = str.replace(/\./g, '').replace(',', '.');
     } else {
-        // Jika hanya ada titik
         let dots = str.match(/\./g);
         if (dots) {
             if (dots.length > 1) {
-                // Lebih dari 1 titik = pemisah ribuan (10.000.000)
                 str = str.replace(/\./g, '');
             } else {
-                // 1 titik. Cek apakah 3 digit di belakangnya (1.000)
                 let parts = str.split('.');
-                if (parts[1] && parts[1].length === 3) {
+                // Jika titik diikuti 3 digit atau lebih, anggap pemisah ribuan
+                if (parts[1] && parts[1].length >= 3) {
                     str = str.replace(/\./g, '');
                 }
             }
@@ -42,22 +38,18 @@ function formatDateTime(iso){
     catch { return iso; }
 }
 
-// === HELPER FORMAT RUPIAH & DESIMAL ===
 function formatNum(x) {
     if (x === undefined || x === null || x === '') return '';
     let str = String(x);
-    
-    // Dukung desimal (misal berat emas 2.54)
     if (str.includes('.') && str.split('.')[1].length !== 3) {
         return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 3 }).format(Number(str));
     }
-    
     let raw = str.replace(/\D/g, '');
     if (!raw) return '';
     return new Intl.NumberFormat('id-ID').format(raw);
 }
 
-// Listener otomatis untuk format input angka (termasuk dukungan koma desimal)
+// === FIX TOTAL: Listener Input (Hitung setelah diformat) ===
 document.addEventListener('input', e => {
     const t = e.target;
     if (t.matches('input[inputmode="numeric"], input[type="number"]')) {
@@ -74,6 +66,11 @@ document.addEventListener('input', e => {
             t.value = new Intl.NumberFormat('id-ID').format(intPart) + decPart;
         } else {
             t.value = decPart ? '0' + decPart : '';
+        }
+
+        // Trigger kalkulasi setelah format selesai
+        if (typeof window.recalcClosing === 'function' && t.id.startsWith('act_')) {
+            window.recalcClosing();
         }
     }
 });
@@ -1130,7 +1127,7 @@ async function closing(){
                     <div id="status_${x.id}" class="small" style="margin-top:4px;"></div>
                 </div>
                 <div style="width:140px; flex-shrink:0;">
-                    <input class="input" id="act_${x.id}" type="text" inputmode="numeric" value="${formatNum(x.amount)}" placeholder="Aktual" style="padding:8px 10px; min-height:36px; font-size:14px; text-align:right;" oninput="recalcClosing()">
+                    <input class="input" id="act_${x.id}" type="text" inputmode="numeric" value="${formatNum(x.amount)}" placeholder="Aktual" style="padding:8px 10px; min-height:36px; font-size:14px; text-align:right;">
                 </div>
             </div>
           `).join('');
