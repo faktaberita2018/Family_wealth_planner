@@ -2,14 +2,13 @@ const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),pr
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-// === FIX TOTAL: Otak Pembaca Angka (Handle 530.0000) ===
+// === FUNGSI PEMBACA ANGKA (Anti-Bug) ===
 const n=v=>{
     if (typeof v === 'number') return v;
     if (!v) return 0;
     let str = String(v).trim();
     if (!str) return 0;
     str = str.replace(/[^\d.,-]/g, ''); 
-    
     if (str.includes(',')) {
         str = str.replace(/\./g, '').replace(',', '.');
     } else {
@@ -19,7 +18,6 @@ const n=v=>{
                 str = str.replace(/\./g, '');
             } else {
                 let parts = str.split('.');
-                // Jika titik diikuti 3 digit atau lebih, anggap pemisah ribuan
                 if (parts[1] && parts[1].length >= 3) {
                     str = str.replace(/\./g, '');
                 }
@@ -49,7 +47,6 @@ function formatNum(x) {
     return new Intl.NumberFormat('id-ID').format(raw);
 }
 
-// === FIX TOTAL: Listener Input (Hitung setelah diformat) ===
 document.addEventListener('input', e => {
     const t = e.target;
     if (t.matches('input[inputmode="numeric"], input[type="number"]')) {
@@ -68,7 +65,6 @@ document.addEventListener('input', e => {
             t.value = decPart ? '0' + decPart : '';
         }
 
-        // Trigger kalkulasi setelah format selesai
         if (typeof window.recalcClosing === 'function' && t.id.startsWith('act_')) {
             window.recalcClosing();
         }
@@ -227,7 +223,13 @@ function unallocated(a){return n(a.balance)-pocketAllocated(a.id)}
 function plan(){return S.cache.plans.find(x=>x.month===S.month)}
 function incomes(pid){return S.cache.incomeItems.filter(x=>x.planId===pid)}
 function items(pid){return S.cache.planItems.filter(x=>x.planId===pid)}
-function pstats(p){if(!p)return{income:0,alloc:0,surplus:0,funded:0};let ii=incomes(p.id),it=items(p.id),income=ii.reduce((a,x)=>a+n(x.amount),0),alloc=it.reduce((a,x)=>a+n(x.amount),0);return{income,alloc,surplus:income-alloc,funded:it.filter(x=>x.fundingStatus==='funded').reduce((a,x)=>a+n(x.amount),0)}}
+function pstats(p){
+    if(!p)return{income:0,alloc:0,surplus:0,funded:0};
+    let ii=incomes(p.id),it=items(p.id),
+        income=ii.reduce((a,x)=>a+n(x.amount),0),
+        alloc=it.reduce((a,x)=>a+n(x.amount),0);
+    return{income,alloc,surplus:income-alloc,funded:it.filter(x=>x.fundingStatus==='funded').reduce((a,x)=>a+n(x.amount),0)}
+}
 function goalValue(gid){return S.cache.goalAllocations.filter(x=>x.goalId===gid&&x.status==='active').reduce((a,x)=>a+n(x.amount),0)}
 
 function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,more:more}[S.page];$('#view').innerHTML=fn()}
@@ -236,6 +238,13 @@ function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('activ
 function home(){
     let p=plan(),ps=pstats(p),g=S.cache.goals.filter(x=>!['archived','cancelled'].includes(x.status)).sort((a,b)=>a.priority-b.priority).slice(0,3);
     let runway = getRunway();
+    
+    // Tampilkan realisasi jika bulan sudah closed
+    let displaySurplus = ps.surplus;
+    if(p && p.status==='closed' && p.closing) {
+        displaySurplus = p.closing.finalAmount;
+    }
+
     return `<div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c)">
         <div class="eyebrow">Total Kekayaan Bersih</div>
         <h1>${money(netWorth())}</h1>
@@ -255,7 +264,7 @@ function home(){
     </div>
     <div class="grid two" style="margin-top:15px">
         <div class="card kpi"><span class="muted small">Pendapatan Rencana</span><b>${money(ps.income)}</b></div>
-        <div class="card kpi"><span class="muted small">Sisa Rencana</span><b class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</b></div>
+        <div class="card kpi"><span class="muted small">Sisa/Minus ${p?.status==='closed'?'(Final)':''}</span><b class="${displaySurplus<0?'negative':'positive'}">${money(displaySurplus)}</b></div>
     </div>
     <div class="grid two">
         <div><div class="section"><div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Tidak wajib catat harian.</span></div></div>${p?`<div class="card"><div class="row"><div class="grow"><b>Total alokasi</b><small class="muted">${items(p.id).length} pos</small></div><b>${money(ps.alloc)}</b></div><div class="row"><div class="grow"><b>Dana disiapkan</b><small class="muted">Penanda atau transfer nyata</small></div><b>${money(ps.funded)}</b></div></div>`:`<div class="card empty">Belum ada rencana.<br><button class="btn primary" data-action="newPlan">Buat sekarang</button></div>`}</div>
@@ -264,7 +273,37 @@ function home(){
 }
 
 function goalRow(g){let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="row"><span style="font-size:24px">${g.icon||'🎯'}</span><div class="grow"><b>${esc(g.name)}</b><div class="progress" style="margin:6px 0"><i style="width:${pc}%"></i></div><small class="muted">${money(x)} · ${pc.toFixed(1)}%</small></div></div>`}
-function planView(){let p=plan(),ps=pstats(p);return `<div class="section"><div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo rekening.</span></div><button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button></div><div class="monthbar"><button class="icon" data-action="prevMonth">‹</button><b>${monthName(S.month)}</b><button class="icon" data-action="nextMonth">›</button></div>${p?`<div class="grid four" style="margin-top:15px"><div class="card kpi"><span class="muted small">Pendapatan</span><b>${money(ps.income)}</b><button class="btn ghost" data-action="addIncome">＋ Income</button></div><div class="card kpi"><span class="muted small">Alokasi</span><b>${money(ps.alloc)}</b></div><div class="card kpi"><span class="muted small">Dana Disiapkan</span><b>${money(ps.funded)}</b></div><div class="card kpi"><span class="muted small">Sisa/Minus</span><b class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</b></div></div><div class="section"><div><h2>Daftar alokasi</h2><span class="muted">Status funded dapat hanya penanda atau transfer.</span></div><div><button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button> <button class="btn dark" data-action="closing">Tutup Bulan</button></div></div><div class="card">${items(p.id).length?items(p.id).map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">${esc(x.category)} · ${x.fundingMode==='transfer'?'Transfer saldo':'Penanda saja'}</small></div><div style="text-align:right"><b>${money(x.amount)}</b><br><button class="fund ${x.fundingStatus}" data-fund="${x.id}">${x.fundingStatus==='funded'?'Dana Disiapkan':'Direncanakan'}</button> <button class="icon" data-remove-item="${x.id}">×</button></div></div>`).join(''):'<div class="empty">Belum ada pos.</div>'}</div>`:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`}
+
+function planView(){
+    let p=plan(),ps=pstats(p);
+    let isClosed = p && p.status === 'closed';
+    
+    let displaySurplus = ps.surplus;
+    if(isClosed && p.closing) {
+        displaySurplus = p.closing.finalAmount;
+    }
+
+    return `<div class="section"><div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo rekening.</span></div><button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button></div>
+    <div class="monthbar"><button class="icon" data-action="prevMonth">‹</button><b>${monthName(S.month)}</b><button class="icon" data-action="nextMonth">›</button></div>
+    ${p?`
+        <div class="grid four" style="margin-top:15px">
+            <div class="card kpi"><span class="muted small">Pendapatan</span><b>${money(ps.income)}</b><button class="btn ghost" data-action="addIncome">＋ Income</button></div>
+            <div class="card kpi"><span class="muted small">Alokasi</span><b>${money(ps.alloc)}</b></div>
+            <div class="card kpi"><span class="muted small">Dana Disiapkan</span><b>${money(ps.funded)}</b></div>
+            <div class="card kpi"><span class="muted small">Sisa/Minus ${isClosed?'(Final)':''}</span><b class="${displaySurplus<0?'negative':'positive'}">${money(displaySurplus)}</b></div>
+        </div>
+        <div class="section">
+            <div><h2>Daftar alokasi</h2><span class="muted">Status funded dapat hanya penanda atau transfer.</span></div>
+            <div>
+                <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button> 
+                ${isClosed 
+                    ? `<span class="badge green" style="padding:10px 14px; font-size:14px;">✅ Bulan Ditutup</span>` 
+                    : `<button class="btn dark" data-action="closing">Tutup Bulan</button>`}
+            </div>
+        </div>
+        <div class="card">${items(p.id).length?items(p.id).map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">${esc(x.category)} · ${x.fundingMode==='transfer'?'Transfer saldo':'Penanda saja'}</small></div><div style="text-align:right"><b>${money(x.amount)}</b><br><button class="fund ${x.fundingStatus}" data-fund="${x.id}">${x.fundingStatus==='funded'?'Dana Disiapkan':'Direncanakan'}</button> ${!isClosed?`<button class="icon" data-remove-item="${x.id}">×</button>`:''}</div></div>`).join(''):'<div class="empty">Belum ada pos.</div>'}</div>
+    `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
+}
 
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
@@ -1054,6 +1093,7 @@ async function transfer(){
         });
 }
 
+// === REVISI UX TUTUP BULAN & UPDATE TARGET DINAMIS ===
 window.recalcClosing = function() {
     let p=plan(); if(!p) return;
     let ps=pstats(p), it=items(p.id);
@@ -1091,16 +1131,36 @@ window.recalcClosing = function() {
         
         if (isCurrentlyDeficit !== shouldBeDeficit) {
             let optionsHtml = shouldBeDeficit 
-                ? '<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
-                : '<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>';
+                ? '<option value="">-- Pilih Tindakan --</option><option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari Rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
+                : '<option value="">-- Pilih Tindakan --</option><option value="goal">Alokasikan ke Tujuan</option><option value="carry">Bawa sebagai Saldo Awal (Bulan Depan)</option><option value="main">Masukkan ke Rekening</option><option value="stay">Tetap tanpa perubahan saldo</option>';
             actionSelect.innerHTML = optionsHtml;
+            // Jika tadi sudah pilih, pilihan akan reset ke kosong saat berubah tipe surplus/defisit
         }
+    }
+};
+
+window.updateClosingTarget = function() {
+    let action = v('x_action');
+    let wrap = document.getElementById('target_wrap');
+    let sel = document.getElementById('x_target');
+    if (!wrap || !sel) return;
+
+    if (action === 'goal') {
+        wrap.style.display = 'block';
+        sel.innerHTML = '<option value="">-- Pilih Tujuan --</option>' + S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('');
+    } else if (action === 'main' || action === 'deficit_source') {
+        wrap.style.display = 'block';
+        sel.innerHTML = '<option value="">-- Pilih Rekening --</option>' + [...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('');
+    } else {
+        wrap.style.display = 'none';
+        sel.innerHTML = '';
     }
 };
 
 async function closing(){
     let p=plan(),ps=pstats(p),set=setting(),it=items(p.id);
     
+    // Generate Rows
     let rows = set.budgetMode==='simple' 
         ? '<div class="info">Mode Ringkas: seluruh alokasi dianggap terpakai. Kamu hanya perlu menangani Sisa Rencana atau Minus.</div>' 
         : `
@@ -1134,17 +1194,22 @@ async function closing(){
     
     let isInitialDeficit = ps.surplus < 0;
     let optionsHtml = isInitialDeficit 
-        ? '<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
-        : '<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>';
+        ? '<option value="">-- Pilih Tindakan --</option><option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari Rekening</option><option value="record_only">Catat tanpa ubah saldo</option>'
+        : '<option value="">-- Pilih Tindakan --</option><option value="goal">Alokasikan ke Tujuan</option><option value="carry">Bawa sebagai Saldo Awal (Bulan Depan)</option><option value="main">Masukkan ke Rekening</option><option value="stay">Tetap tanpa perubahan saldo</option>';
 
-    modal('Tutup Bulan', `${rows}<div class="formgrid" style="margin-top:13px">
-        <div class="field"><label>Tindakan</label>
-            <select id="x_action" class="input">${optionsHtml}</select>
+    modal('Tutup Bulan', `
+        ${rows}
+        <div class="formgrid" style="margin-top:13px">
+            <div class="field full">
+                <label>Tindakan</label>
+                <select id="x_action" class="input" onchange="updateClosingTarget()">${optionsHtml}</select>
+            </div>
+            <div class="field full" id="target_wrap" style="display:none;">
+                <label>Tujuan/Rekening</label>
+                <select id="x_target" class="input"></select>
+            </div>
         </div>
-        <div class="field"><label>Tujuan/Rekening opsional</label>
-            <select id="x_target" class="input"><option value="">Pilih</option>${S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}${[...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('')}</select>
-        </div>
-    </div>`, async()=>{
+    `, async()=>{
         let totalActual=0;
         if(set.budgetMode!=='simple') {
             it.forEach(x => totalActual += n(v('act_'+x.id)));
@@ -1154,6 +1219,10 @@ async function closing(){
         
         let closeAmount = ps.income - totalActual;
         let action = v('x_action'), target = v('x_target');
+        
+        if(!action) return toast('Pilih tindakan terlebih dahulu');
+        if(action==='goal' && !target.startsWith('g:')) return toast('Pilih tujuan terlebih dahulu');
+        if((action==='main' || action==='deficit_source') && !target.startsWith('s:')) return toast('Pilih rekening terlebih dahulu');
         
         p.status='closed'; p.closedAt=dateNow(); 
         p.closing={
@@ -1170,7 +1239,10 @@ async function closing(){
         if(action==='carry'||action==='deficit_carry'){
             let np=S.cache.plans.find(x=>x.month===nextMonth);
             if(!np){np={id:id('pl'),month:nextMonth,name:'Rencana '+monthName(nextMonth),status:'open',createdAt:dateNow()};await FWPDB.put('plans',np)}
-            await FWPDB.put('incomeItems',{id:id('in'),planId:np.id,name:closeAmount>=0?'Carry Forward':'Defisit Bulan Sebelumnya',amount:closeAmount})
+            
+            // Simpan dengan nama yang lebih jelas
+            let nextIncomeName = closeAmount >= 0 ? 'Sisa Bulan Lalu (Carry Forward)' : 'Defisit Bulan Lalu';
+            await FWPDB.put('incomeItems',{id:id('in'),planId:np.id,name:nextIncomeName,amount:closeAmount})
         }else if(action==='goal'&&target.startsWith('g:')){
             let gid=target.slice(2),main=S.cache.accounts.find(x=>x.isMain);
             if(main&&closeAmount>0)await FWPDB.put('goalAllocations',{id:id('ga'),goalId:gid,sourceType:'account',sourceId:main.id,amount:closeAmount,status:'active',createdAt:dateNow()})
@@ -1181,7 +1253,10 @@ async function closing(){
         closeModal();await refresh();toast('Bulan ditutup')
     });
 
-    setTimeout(() => recalcClosing(), 10);
+    setTimeout(() => {
+        if(set.budgetMode !== 'simple') recalcClosing();
+        updateClosingTarget();
+    }, 10);
 }
 
 async function copyPlan(){
