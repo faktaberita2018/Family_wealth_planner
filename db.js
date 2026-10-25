@@ -1,14 +1,19 @@
 const FWPDB={
     name:'family_wealth_planner',
-    version:2, // UPGRADE: Naik ke versi 2
+    version:3, // UPGRADE: Naik ke versi 3 (Reset data emas lama, pertahankan data lain)
     stores:['settings','institutions','accounts','pockets','plans','planItems','incomeItems','goals','goalAllocations','ledger','events',
-            'goldItems','assets','debts'], // BARU: Tabel Emas, Aset, Utang
+            'assets','debts',
+            'owners','goldAccounts','goldPhysical','goldJewelry','goldTransactions'], // BARU
     db:null,
     async open(){
         return new Promise((ok,no)=>{
             let r=indexedDB.open(this.name,this.version);
             r.onupgradeneeded=e=>{
                 let d=e.target.result;
+                // Hapus tabel emas lama
+                if(d.objectStoreNames.contains('goldItems')) {
+                    d.deleteObjectStore('goldItems');
+                }
                 this.stores.forEach(s=>{
                     if(!d.objectStoreNames.contains(s)) d.createObjectStore(s,{keyPath:'id'})
                 })
