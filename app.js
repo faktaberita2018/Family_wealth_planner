@@ -246,7 +246,7 @@ function wealth(){
 
 function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><span class="muted">Satu saldo dapat dialokasikan ke beberapa tujuan.</span></div><button class="btn primary" data-action="addGoal">＋ Tujuan</button></div><div class="grid three">${S.cache.goals.map(g=>{let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="card"><div style="display:flex;justify-content:space-between"><span style="font-size:26px">${g.icon}</span><span class="badge ${g.status==='used'?'purple':g.status==='achieved'?'green':'blue'}">${g.status}</span></div><h3>${esc(g.name)}</h3><small class="muted">Target ${money(g.target)} · Prioritas ${g.priority}</small><div class="progress" style="margin:14px 0 7px"><i style="width:${pc}%"></i></div><b>${money(x)}</b><small class="muted"> · ${pc.toFixed(1)}%</small><div style="margin-top:14px"><button class="btn ghost" data-allocate="${g.id}">Alokasikan saldo</button> <button class="btn ghost" data-goal-status="${g.id}">Status</button></div></div>`}).join('')||'<div class="card empty">Belum ada tujuan.</div>'}</div>`}
 
-// === REVISI: TAB REKENING (EDIT & HAPUS) ===
+// === REVISI: TAB REKENING (EDIT & HAPUS KANTONG) ===
 function accountsView(){
     return `<div class="section">
         <div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div>
@@ -289,8 +289,9 @@ function accountsView(){
                                         <b style="font-size:13px;">↳ ${esc(p.name)}</b>
                                     </div>
                                     <div style="display:flex; align-items:center; gap:6px;">
-                                        <b style="font-size:13px;">${money(p.balance)}</b>
-                                        <button class="icon" style="width:24px; height:24px; font-size:12px;" data-reconcile-pocket="${p.id}">✎</button>
+                                        <b style="font-size:13px; margin-right:4px;">${money(p.balance)}</b>
+                                        <button class="icon" style="width:24px; height:24px; font-size:12px;" data-edit-pocket="${p.id}" title="Edit Kantong">✎</button>
+                                        <button class="icon" style="width:24px; height:24px; font-size:12px; color:var(--red);" data-del-pocket="${p.id}" title="Hapus Kantong">×</button>
                                     </div>
                                 </div>
                             `).join('')}
@@ -553,7 +554,7 @@ async function allocateGoal(gid){
     })
 }
 
-// === TAMBAHAN: FUNGSI EDIT & HAPUS REKENING/INSTITUSI ===
+// === FUNGSI EDIT & HAPUS REKENING/INSTITUSI ===
 async function addInstitution(){modal('Tambah Institusi',`<div class="formgrid">${f('Nama','x_name')}${f('Jenis','x_type','text','Bank')}</div>`,async()=>{await FWPDB.put('institutions',{id:id('i'),name:v('x_name'),type:v('x_type')});closeModal();await refresh()})}
 async function editInstitution(id) {
     let inst = S.cache.institutions.find(x=>x.id===id);
@@ -601,7 +602,42 @@ async function delAccount(id) {
 
 async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f('Nama kantong','x_name')}${f('Alokasi saldo','x_balance','number','0')}</div><div class="info small">Kantong adalah bagian dari saldo rekening induk, bukan saldo tambahan.</div>`,async()=>{let a=acct(aid),amount=n(v('x_balance'));if(pocketAllocated(aid)+amount>n(a.balance))return toast('Total kantong melebihi saldo rekening');await FWPDB.put('pockets',{id:id('p'),accountId:aid,name:v('x_name'),balance:amount,createdAt:dateNow()});closeModal();await refresh()})}
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
-async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
+
+// === FUNGSI EDIT & HAPUS KANTONG ===
+async function editPocket(pid) {
+    let p = pocket(pid), a = acct(p.accountId);
+    modal('Edit Kantong', `
+        <div class="formgrid">
+            ${f('Nama kantong','x_name','text',p.name)}
+            ${f('Alokasi saldo','x_balance','number',p.balance)}
+        </div>
+        <div class="info small" style="margin-top:12px">Saldo kantong adalah bagian dari saldo rekening induk (${esc(a.name)}).</div>
+    `, async () => {
+        let newName = v('x_name');
+        let neu = n(v('x_balance'));
+        let other = S.cache.pockets.filter(x => x.accountId === a.id && x.id !== pid).reduce((s, x) => s + n(x.balance), 0);
+        
+        if (other + neu > n(a.balance)) return toast('Total alokasi kantong melebihi saldo rekening induk');
+        
+        let oldBalance = n(p.balance);
+        p.name = newName;
+        p.balance = neu;
+        
+        await FWPDB.put('pockets', p);
+        if (oldBalance !== neu) {
+            await ledger('reconcile', 'Rekonsiliasi kantong ' + p.name, 0, {pocketId: pid, old: oldBalance, new: neu}, true);
+        }
+        closeModal(); await refresh(); toast('Kantong diperbarui');
+    });
+}
+
+async function delPocket(pid) {
+    let p = pocket(pid);
+    if (!confirm(`Hapus kantong "${p.name}"? Saldo ${money(p.balance)} akan kembali menjadi saldo bebas di rekening induk.`)) return;
+    await FWPDB.del('pockets', pid);
+    await refresh();
+    toast('Kantong dihapus');
+}
 
 // --- CRUD EMAS ---
 async function addGold(){
@@ -1112,7 +1148,10 @@ document.addEventListener('click',async e=>{
     
     if(t.dataset.addPocket)return addPocket(t.dataset.addPocket);
     if(t.dataset.reconcileAccount)return reconcileAccount(t.dataset.reconcileAccount);
-    if(t.dataset.reconcilePocket)return reconcilePocket(t.dataset.reconcilePocket);
+    
+    // REVISI: Edit & Hapus Kantong
+    if(t.dataset.editPocket)return editPocket(t.dataset.editPocket);
+    if(t.dataset.delPocket)return delPocket(t.dataset.delPocket);
     
     if(t.dataset.sellGold) return sellGold(t.dataset.sellGold);
     
