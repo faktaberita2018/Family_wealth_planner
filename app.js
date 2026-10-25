@@ -1,10 +1,3 @@
-Saya tidak perlu kode sebelumnya, saya sudah menyimpannya utuh di sistem.
-
-Masalahnya murni karena fungsi regex yang saya buat sebelumnya tidak kompatibel dengan HP-mu. Saya sudah membuat Fungsi Pembaca Angka (Parser) baru yang 100% aman untuk semua versi iOS/Android, tanpa menggunakan fitur regex yang bikin error.
-
-Silakan hapus semua isi app.js dan copy-paste kode di bawah ini:
-
-```javascript
 const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),privacy:false,theme:'light',cache:{}};
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
