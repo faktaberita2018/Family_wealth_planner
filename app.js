@@ -21,7 +21,18 @@ async function refresh(){
     if(!set?.onboarded)showOnboarding(1)
 }
 
-function setting(){return S.cache.settings.find(x=>x.id==='main')||{id:'main',onboarded:false,budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,ownerName:'Kamu',goldPrice:2000000}}
+function setting(){
+    let def = {
+        id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used', 
+        surplusBehavior:'ask', strictBalance:false, theme:'light', privacy:false, 
+        ownerName:'Kamu', goldPrice:2000000,
+        goldPrices: { antam: 0, ubs: 0, pegadaian: 0, lastSync: null }
+    };
+    let s = S.cache.settings.find(x=>x.id==='main') || def;
+    if(!s.goldPrices) s.goldPrices = { antam: 0, ubs: 0, pegadaian: 0, lastSync: null };
+    return s;
+}
+
 function acct(id){return S.cache.accounts.find(x=>x.id===id)}
 function pocket(id){return S.cache.pockets.find(x=>x.id===id)}
 function goal(id){return S.cache.goals.find(x=>x.id===id)}
@@ -30,21 +41,34 @@ function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 
 // --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
-function totalGoldValue(){ return S.cache.goldItems.filter(x=>x.status!=='sold').reduce((a,x)=>a+(n(x.weight)*n(setting().goldPrice)),0) }
+
+// FUNGSI BARU: Menentukan harga emas berdasarkan merek
+function getGoldPrice(brand) {
+    let gp = setting().goldPrices || {};
+    let b = String(brand || '').toLowerCase();
+    if (b.includes('antam') && gp.antam > 0) return n(gp.antam);
+    if (b.includes('ubs') && gp.ubs > 0) return n(gp.ubs);
+    if (b.includes('pegadaian') && gp.pegadaian > 0) return n(gp.pegadaian);
+    return n(setting().goldPrice); // Fallback ke harga manual
+}
+
+function totalGoldValue(){ 
+    return S.cache.goldItems.filter(x=>x.status!=='sold').reduce((a,x)=>{
+        let price = getGoldPrice(x.brand);
+        return a + (n(x.weight) * price);
+    },0) 
+}
+
 function totalAssetValue(){ return S.cache.assets.reduce((a,x)=>a+n(x.value),0) }
 function totalPiutang(){ return S.cache.debts.filter(x=>x.type==='piutang'&&x.status==='active').reduce((a,x)=>a+n(x.amount),0) }
 function totalUtang(){ return S.cache.debts.filter(x=>x.type==='utang'&&x.status==='active').reduce((a,x)=>a+n(x.amount),0) }
 function netWorth(){ return totalAccountBalance() + totalGoldValue() + totalAssetValue() + totalPiutang() - totalUtang() }
 
 function getRunway() {
-    // Ambil plan bulan ini untuk hitung pengeluaran
     let p = plan();
     let it = p ? items(p.id) : [];
     let monthlyExpense = it.filter(x => !['Saving','Sinking Fund'].includes(x.category)).reduce((a, x) => a + n(x.amount), 0);
-    
-    // Jika belum ada plan, pakai asumsi default Rp 10.000.000
     if (monthlyExpense === 0) monthlyExpense = 10000000; 
-
     let liquid = totalAccountBalance() + totalGoldValue();
     let months = liquid / monthlyExpense;
     return { months: months.toFixed(1), monthlyExpense, liquid };
@@ -112,32 +136,52 @@ function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><
 
 function accountsView(){return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div><div class="grid two">${S.cache.institutions.map(i=>`<div class="card"><div style="display:flex;justify-content:space-between"><div><b>${esc(i.name)}</b><small class="muted">${esc(i.type)}</small></div><button class="btn ghost" data-add-account="${i.id}">＋ Rekening</button></div>${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{let pa=S.cache.pockets.filter(p=>p.accountId===a.id),alloc=pocketAllocated(a.id),ua=unallocated(a);return `<div style="margin-top:15px"><div class="row"><div class="grow"><b>${esc(a.name)}</b>${a.isMain?'<span class="badge green">Utama</span>':''}<small class="muted">Saldo aktual · Kantong ${money(alloc)} · Bebas ${money(ua)}</small></div><b>${money(a.balance)}</b><button class="icon" data-reconcile-account="${a.id}">✎</button><button class="icon" data-add-pocket="${a.id}">＋</button></div>${ua<0?'<div class="warning small">Total kantong melebihi saldo rekening. Lakukan rekonsiliasi.</div>':''}${pa.map(p=>`<div class="row" style="margin-left:17px"><div class="grow"><b>↳ ${esc(p.name)}</b><small class="muted">Alokasi dalam rekening</small></div><b>${money(p.balance)}</b><button class="icon" data-reconcile-pocket="${p.id}">✎</button></div>`).join('')}</div>`}).join('')||'<div class="empty">Belum ada rekening.</div>'}</div>`).join('')}</div>`}
 
-// --- MODUL EMAS (Update Fitur Jual & Owner) ---
+// --- MODUL EMAS (Update Real-time P/L) ---
 function goldView() {
-    let gp = setting().goldPrice;
+    let gp = setting().goldPrices || {};
+    let lastSync = gp.lastSync ? new Date(gp.lastSync).toLocaleString('id-ID') : 'Belum pernah';
+    
     return `<div class="section">
-        <div><h2>Aset Emas</h2><span class="muted">Harga acuan saat ini: ${money(gp)}/gram</span></div>
-        <button class="btn primary" data-action="addGold">＋ Emas</button>
+        <div>
+            <h2>Aset Emas</h2>
+            <span class="muted" style="display:block;margin-bottom:5px">Sync terakhir: ${lastSync}</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
+                ${gp.antam ? `<span class="badge blue">Antam: ${money(gp.antam)}/gr</span>` : ''}
+                ${gp.ubs ? `<span class="badge green">UBS: ${money(gp.ubs)}/gr</span>` : ''}
+                ${gp.pegadaian ? `<span class="badge orange">Pegadaian: ${money(gp.pegadaian)}/gr</span>` : ''}
+            </div>
+        </div>
+        <div style="display:flex;gap:8px">
+            <button class="btn ghost" data-action="syncGold">🔄 Sync</button>
+            <button class="btn primary" data-action="addGold">＋ Emas</button>
+        </div>
     </div>
     <div class="grid three">
         ${S.cache.goldItems.filter(g=>g.status!=='sold').map(g=>{
-            let val = n(g.weight) * gp;
+            let currentPrice = getGoldPrice(g.brand);
+            let val = n(g.weight) * currentPrice;
             let profit = val - n(g.buyPrice);
+            let profitPct = n(g.buyPrice) > 0 ? (profit / n(g.buyPrice)) * 100 : 0;
             let profitColor = profit >= 0 ? 'var(--green)' : 'var(--red)';
+            
             return `<div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <span class="badge orange">${esc(g.brand)}</span>
                     <span class="badge blue" style="font-size:10px">${g.owner || 'Milik Sendiri'}</span>
                 </div>
                 <h3 style="margin:10px 0">${esc(g.name)}</h3>
-                <div style="display:flex;justify-content:space-between">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
                     <small class="muted">Beli: ${money(g.buyPrice)}</small>
                     <b>${n(g.weight)} gr</b>
                 </div>
                 <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
-                    <div style="display:flex;justify-content:space-between">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:5px">
                         <small class="muted">Nilai Pasar</small>
-                        <b style="color:${profitColor}">${money(val)}</b>
+                        <b>${money(val)}</b>
+                    </div>
+                    <div style="display:flex;justify-content:space-between">
+                        <small class="muted">P/L</small>
+                        <b style="color:${profitColor}">${profit >= 0 ? '+' : ''}${money(profit)} <small>(${profitPct.toFixed(1)}%)</small></b>
                     </div>
                 </div>
                 <button class="btn dark" style="margin-top:10px;width:100%" data-sell-gold="${g.id}">Jual Emas</button>
@@ -146,7 +190,7 @@ function goldView() {
     </div>`
 }
 
-// --- MODUL ASET TETAP (Update Owner) ---
+// --- MODUL ASET TETAP ---
 function assetsView() {
     return `<div class="section">
         <div><h2>Aset Tetap</h2><span class="muted">Kendaraan, Properti, Elektronik.</span></div>
@@ -198,7 +242,7 @@ function more(){
     <div class="grid two">
         <div class="card">
             <h3>Preferensi</h3>
-            <div class="row"><div class="grow"><b>Harga Emas Acuan</b><small class="muted">Per gram</small></div><button class="btn ghost" data-action="setGoldPrice">${money(setting().goldPrice)}</button></div>
+            <div class="row"><div class="grow"><b>Harga Emas Acuan</b><small class="muted">Manual (Fallback)</small></div><button class="btn ghost" data-action="setGoldPrice">${money(setting().goldPrice)}</button></div>
             <div class="row"><div class="grow"><b>Mode budgeting</b><small class="muted">${esc(setting().budgetMode)}</small></div><button class="btn ghost" data-action="preferences">Ubah</button></div>
         </div>
         <div class="card"><h3>Data</h3><p class="muted">Backup seluruh object store dan versi skema.</p><button class="btn dark" data-action="backup">Backup JSON</button> <button class="btn ghost" data-action="restore">Restore</button></div>
@@ -242,7 +286,7 @@ let ON={budgetMode:'simple',defaultClosing:'used'};
 
 async function seed(){
     let set=await FWPDB.get('settings','main');if(set)return;
-    await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000});
+    await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000,goldPrices:{antam:0,ubs:0,pegadaian:0,lastSync:null}});
     for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Kas'}])await FWPDB.put('institutions',x)
 }
 
@@ -294,11 +338,19 @@ async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f(
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
 
-// --- CRUD EMAS, ASET, UTANG ---
+// --- CRUD EMAS (Update Dropdown Brand & Sync) ---
 async function addGold(){
     modal('Tambah Emas', `<div class="formgrid">
         ${f('Nama / Keterangan','x_name','text','Cincin Antam')}
-        ${f('Merek','x_brand','text','Antam')}
+        <div class="field">
+            <label>Merek</label>
+            <select id="x_brand" class="input">
+                <option value="Antam">Antam</option>
+                <option value="UBS">UBS</option>
+                <option value="Pegadaian">Pegadaian</option>
+                <option value="Lainnya">Lainnya</option>
+            </select>
+        </div>
         ${f('Berat (Gram)','x_weight','number','1')}
         ${f('Harga Beli (Rp)','x_price','number','0')}
         <div class="field"><label>Pemilik</label><select id="x_owner" class="input"><option>Milik Sendiri</option><option>Istri</option><option>Suami</option><option>Bersama</option></select></div>
@@ -309,13 +361,43 @@ async function addGold(){
     });
 }
 
+async function syncGoldPrices() {
+    toast('Menarik data harga emas...');
+    try {
+        let res = await fetch('/api/gold-price');
+        let data = await res.json();
+        if (data.success) {
+            let s = setting();
+            s.goldPrices = {
+                antam: data.antam || 0,
+                ubs: data.ubs || 0,
+                pegadaian: data.pegadaian ? data.pegadaian.jualPerGram : 0,
+                lastSync: data.timestamp
+            };
+            // Update fallback manual price dengan harga antam
+            if (s.goldPrices.antam > 0) s.goldPrice = s.goldPrices.antam;
+            
+            await FWPDB.put('settings', s);
+            await refresh();
+            toast('Harga emas berhasil diperbarui!');
+        } else {
+            throw new Error('Gagal dari server');
+        }
+    } catch (e) {
+        console.error(e);
+        toast('Gagal sinkronisasi. Cek koneksi atau input manual.');
+    }
+}
+
 async function sellGold(id) {
     let g = await FWPDB.get('goldItems', id);
     if(!g || g.status === 'sold') return;
     
-    modal('Jual Emas', `<div class="info small" style="margin-bottom:12px">Anda akan menjual <b>${esc(g.name)}</b> seberat ${n(g.weight)} gram.</div>
+    let currentPrice = getGoldPrice(g.brand);
+    
+    modal('Jual Emas', `<div class="info small" style="margin-bottom:12px">Anda akan menjual <b>${esc(g.name)}</b> (${g.brand}) seberat ${n(g.weight)} gram.</div>
         <div class="formgrid">
-            ${f('Harga Jual Total (Rp)','x_sell_price','number', String(n(g.weight)*n(setting().goldPrice)))}
+            ${f('Harga Jual Total (Rp)','x_sell_price','number', String(n(g.weight)*currentPrice))}
             <div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${S.cache.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></div>
         </div>`, async()=>{
             let sellPrice = n(v('x_sell_price'));
@@ -325,10 +407,8 @@ async function sellGold(id) {
             let profit = sellPrice - n(g.buyPrice);
             
             try {
-                // 1. Tambah saldo ke rekening
                 await alterSource(accId, sellPrice, 'Hasil Jual Emas: ' + g.name, {goldId: g.id, profit: profit});
                 
-                // 2. Ubah status emas jadi terjual
                 g.status = 'sold';
                 g.soldPrice = sellPrice;
                 g.soldProfit = profit;
@@ -373,10 +453,10 @@ async function addDebt(){
 
 async function setGoldPrice(){
     let s = setting();
-    modal('Harga Emas Acuan', `${f('Harga per Gram (Rp)','x_price','number',s.goldPrice)}`, async()=>{
+    modal('Harga Emas Manual (Fallback)', `<div class="info small" style="margin-bottom:12px">Gunakan ini jika API Vercel gagal / Anda ingin mengatur harga rata-rata secara manual.</div>${f('Harga per Gram (Rp)','x_price','number',s.goldPrice)}`, async()=>{
         s.goldPrice = n(v('x_price'));
         await FWPDB.put('settings', s);
-        closeModal(); await refresh(); toast('Harga emas diperbarui');
+        closeModal(); await refresh(); toast('Harga emas manual diperbarui');
     });
 }
 
@@ -444,7 +524,7 @@ function shift(d){let x=new Date(S.month+'-01');x.setMonth(x.getMonth()+d);S.mon
 
 const actions={
     closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution, transfer, closing, copyPlan, preferences, backup,
-    addGold, addAsset, addDebt, setGoldPrice,
+    addGold, addAsset, addDebt, setGoldPrice, syncGold: syncGoldPrices, // Daftarkan fungsi sync di sini
     restore:()=>$('#restoreFile').click(),
     prevMonth:()=>shift(-1), nextMonth:()=>shift(1),
     theme:async()=>{let s=setting();s.theme=s.theme==='dark'?'light':'dark';await FWPDB.put('settings',s);await refresh()},
@@ -459,7 +539,7 @@ document.addEventListener('click',async e=>{
     let t=e.target.closest('button');if(!t)return;
     if(t.dataset.page){S.page=t.dataset.page;render();return}
     if(t.dataset.action){
-        if($('#modal').open&&t.dataset.action!=='closeModal'&&!['theme','privacy'].includes(t.dataset.action))closeModal();
+        if($('#modal').open&&t.dataset.action!=='closeModal'&&!['theme','privacy','syncGold'].includes(t.dataset.action))closeModal();
         await actions[t.dataset.action]?.();return
     }
     if(t.dataset.wealth){S.wealth=t.dataset.wealth;render();return}
