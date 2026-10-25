@@ -26,10 +26,10 @@ function setting(){
         id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used', 
         surplusBehavior:'ask', strictBalance:false, theme:'light', privacy:false, 
         ownerName:'Kamu', goldPrice:2000000,
-        goldPrices: { antam: 0, ubs: 0, pegadaian: 0, lastSync: null }
+        goldPrices: { pegadaian: 0, lastSync: null } // Hanya Pegadaian untuk saat ini
     };
     let s = S.cache.settings.find(x=>x.id==='main') || def;
-    if(!s.goldPrices) s.goldPrices = { antam: 0, ubs: 0, pegadaian: 0, lastSync: null };
+    if(!s.goldPrices) s.goldPrices = { pegadaian: 0, lastSync: null };
     return s;
 }
 
@@ -42,14 +42,15 @@ function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 // --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
 
-// FUNGSI BARU: Menentukan harga emas berdasarkan merek
+// Fungsi Harga Emas: Semua merek sementara pakai harga Pegadaian
 function getGoldPrice(brand) {
     let gp = setting().goldPrices || {};
-    let b = String(brand || '').toLowerCase();
-    if (b.includes('antam') && gp.antam > 0) return n(gp.antam);
-    if (b.includes('ubs') && gp.ubs > 0) return n(gp.ubs);
-    if (b.includes('pegadaian') && gp.pegadaian > 0) return n(gp.pegadaian);
-    return n(setting().goldPrice); // Fallback ke harga manual
+    
+    // Jika harga Pegadaian sudah di-sync, pakai itu untuk semua merek
+    if (gp.pegadaian > 0) return n(gp.pegadaian);
+    
+    // Jika belum sync, pakai harga manual di pengaturan
+    return n(setting().goldPrice); 
 }
 
 function totalGoldValue(){ 
@@ -136,7 +137,7 @@ function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><
 
 function accountsView(){return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div><div class="grid two">${S.cache.institutions.map(i=>`<div class="card"><div style="display:flex;justify-content:space-between"><div><b>${esc(i.name)}</b><small class="muted">${esc(i.type)}</small></div><button class="btn ghost" data-add-account="${i.id}">＋ Rekening</button></div>${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{let pa=S.cache.pockets.filter(p=>p.accountId===a.id),alloc=pocketAllocated(a.id),ua=unallocated(a);return `<div style="margin-top:15px"><div class="row"><div class="grow"><b>${esc(a.name)}</b>${a.isMain?'<span class="badge green">Utama</span>':''}<small class="muted">Saldo aktual · Kantong ${money(alloc)} · Bebas ${money(ua)}</small></div><b>${money(a.balance)}</b><button class="icon" data-reconcile-account="${a.id}">✎</button><button class="icon" data-add-pocket="${a.id}">＋</button></div>${ua<0?'<div class="warning small">Total kantong melebihi saldo rekening. Lakukan rekonsiliasi.</div>':''}${pa.map(p=>`<div class="row" style="margin-left:17px"><div class="grow"><b>↳ ${esc(p.name)}</b><small class="muted">Alokasi dalam rekening</small></div><b>${money(p.balance)}</b><button class="icon" data-reconcile-pocket="${p.id}">✎</button></div>`).join('')}</div>`}).join('')||'<div class="empty">Belum ada rekening.</div>'}</div>`).join('')}</div>`}
 
-// --- MODUL EMAS (Update Real-time P/L) ---
+// --- MODUL EMAS (Hanya menampilkan harga Pegadaian) ---
 function goldView() {
     let gp = setting().goldPrices || {};
     let lastSync = gp.lastSync ? new Date(gp.lastSync).toLocaleString('id-ID') : 'Belum pernah';
@@ -146,8 +147,6 @@ function goldView() {
             <h2>Aset Emas</h2>
             <span class="muted" style="display:block;margin-bottom:5px">Sync terakhir: ${lastSync}</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px">
-                ${gp.antam ? `<span class="badge blue">Antam: ${money(gp.antam)}/gr</span>` : ''}
-                ${gp.ubs ? `<span class="badge green">UBS: ${money(gp.ubs)}/gr</span>` : ''}
                 ${gp.pegadaian ? `<span class="badge orange">Pegadaian: ${money(gp.pegadaian)}/gr</span>` : ''}
             </div>
         </div>
@@ -286,7 +285,7 @@ let ON={budgetMode:'simple',defaultClosing:'used'};
 
 async function seed(){
     let set=await FWPDB.get('settings','main');if(set)return;
-    await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000,goldPrices:{antam:0,ubs:0,pegadaian:0,lastSync:null}});
+    await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000,goldPrices:{pegadaian:0,lastSync:null}});
     for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Kas'}])await FWPDB.put('institutions',x)
 }
 
@@ -338,16 +337,16 @@ async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f(
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
 
-// --- CRUD EMAS (Update Dropdown Brand & Sync) ---
+// --- CRUD EMAS (Khusus Sync Pegadaian) ---
 async function addGold(){
     modal('Tambah Emas', `<div class="formgrid">
         ${f('Nama / Keterangan','x_name','text','Cincin Antam')}
         <div class="field">
             <label>Merek</label>
             <select id="x_brand" class="input">
+                <option value="Pegadaian">Pegadaian</option>
                 <option value="Antam">Antam</option>
                 <option value="UBS">UBS</option>
-                <option value="Pegadaian">Pegadaian</option>
                 <option value="Lainnya">Lainnya</option>
             </select>
         </div>
@@ -366,20 +365,19 @@ async function syncGoldPrices() {
     try {
         let res = await fetch('/api/gold-price');
         let data = await res.json();
-        if (data.success) {
+        if (data.success && data.pegadaian) {
             let s = setting();
             s.goldPrices = {
-                antam: data.antam || 0,
-                ubs: data.ubs || 0,
-                pegadaian: data.pegadaian ? data.pegadaian.jualPerGram : 0,
+                pegadaian: data.pegadaian.jualPerGram || 0,
                 lastSync: data.timestamp
             };
-            // Update fallback manual price dengan harga antam
-            if (s.goldPrices.antam > 0) s.goldPrice = s.goldPrices.antam;
+            
+            // Set manual fallback juga agar konsisten
+            if (s.goldPrices.pegadaian > 0) s.goldPrice = s.goldPrices.pegadaian;
             
             await FWPDB.put('settings', s);
             await refresh();
-            toast('Harga emas berhasil diperbarui!');
+            toast('Harga Buyback Pegadaian diperbarui!');
         } else {
             throw new Error('Gagal dari server');
         }
