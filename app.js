@@ -51,7 +51,7 @@ function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('activ
 function home(){
     let p=plan(),ps=pstats(p),g=S.cache.goals.filter(x=>!['archived','cancelled'].includes(x.status)).sort((a,b)=>a.priority-b.priority).slice(0,3);
     return `<div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c)">
-        <div class="eyebrow">Total Kekayaan Bersih</div>
+        <div class="eyebrow">Total Kekayaan Bersih Banget</div>
         <h1>${money(netWorth())}</h1>
         <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
             <span>💵 Kas: ${money(totalAccountBalance())}</span>
