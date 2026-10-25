@@ -280,3 +280,15 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
   overflow-y: auto;
   overscroll-behavior: contain; /* Mencegah halaman di belakang ikut ter-scroll */
 }
+
+/* === FIX: Sticky Summary di Tutup Bulan === */
+.sticky-summary {
+    position: sticky;
+    top: -16px; /* Menyesuaikan padding modal-body */
+    background: var(--surface);
+    z-index: 10;
+    padding: 16px 16px 12px;
+    margin: -16px -16px 12px;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.05);
+}
