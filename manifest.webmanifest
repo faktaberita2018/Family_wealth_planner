@@ -1,0 +1,16 @@
+{
+  "name": "Family Wealth Planner",
+  "short_name": "Wealth Planner",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d100e",
+  "theme_color": "#172019",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
