@@ -7,18 +7,23 @@ export default async function handler(req, res) {
     });
     const html = await response.text();
 
-    // Regex untuk mencari angka buyback (kolom BELI)
-    // 24K: Mencari pola "24K(99,9%) ... angka"
-    const match24 = html.match(/24K\(99,9%\)[\s\S]*?(\d{3,4})/i);
-    // 18K: Mencari pola "18K(75%) ... angka"
-    const match18 = html.match(/18K\(75%\)[\s\S]*?(\d{3,4})/i);
-    // 9K: Mencari pola "9K(37,5%) ... angka" (mengambil harga buyback pertama)
-    const match9 = html.match(/9K\(37,5%\)[\s\S]*?(\d{3,4})/i);
+    // Fungsi helper untuk mencari dua angka dan mengambil angka KEDUA (Kolom BELI/Buyback)
+    function extractBuyback(karatString) {
+      // Mencari teks karat, lalu menangkap 2 kelompok angka yang dipisahkan koma/titik
+      const regex = new RegExp(`${karatString}[\\s\\S]*?([\\d\\.,]+)[\\s\\S]*?([\\d\\.,]+)`, 'i');
+      const match = html.match(regex);
+      if (match && match[2]) {
+        // Hapus koma/titik, lalu kalikan 1000 (karena di web tertulis 2,269 yang artinya 2.269.000)
+        const angkaBersih = match[2].replace(/[.,]/g, '');
+        return parseFloat(angkaBersih) * 1000;
+      }
+      return 0;
+    }
 
-    // Konversi dari ribuan ke Rupiah penuh (contoh: 2269 -> 2.269.000)
-    const harga24K = match24 ? parseFloat(match24[1]) * 1000 : 0;
-    const harga18K = match18 ? parseFloat(match18[1]) * 1000 : 0;
-    const harga9K = match9 ? parseFloat(match9[1]) * 1000 : 0;
+    // Ambil harga Beli (Buyback) untuk masing-masing kadar
+    const harga24K = extractBuyback('24K');
+    const harga18K = extractBuyback('18K');
+    const harga9K = extractBuyback('9K');
 
     if (harga24K === 0 && harga18K === 0 && harga9K === 0) {
       throw new Error('Gagal menemukan harga di halaman The Palace');
