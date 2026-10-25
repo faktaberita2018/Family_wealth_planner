@@ -14,6 +14,7 @@
   --shadow-lg:0 8px 32px rgba(20,40,15,.10),0 16px 48px rgba(20,40,15,.06);
   --r-xs:8px; --r-sm:12px; --r-md:16px; --r-lg:20px; --r-xl:26px; --r-pill:999px;
 }
+
 html[data-theme=dark] {
   --bg:#0c0f0d; --bg-2:#131714;
   --surface:#171c18; --surface-2:#1f2620; --surface-3:#2a332b;
@@ -29,6 +30,7 @@ html[data-theme=dark] {
   --shadow:0 2px 8px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2);
   --shadow-lg:0 8px 32px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.3);
 }
+
 *,*::before,*::after{box-sizing:border-box}
 html{overflow-x:clip}
 body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);
@@ -44,6 +46,9 @@ h2{font-size:clamp(18px,3.5vw,22px);font-weight:800}
 h3{font-size:16px;font-weight:800}
 p{margin:0}
 
+/* === FIX: Class hidden dipaksa !important === */
+.hidden { display: none !important; }
+
 .shell{width:100%;max-width:1120px;margin-inline:auto;padding-inline:clamp(12px,3vw,20px)}
 
 header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
@@ -51,8 +56,12 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
   border-bottom:1px solid var(--border)}
 .bar{min-height:64px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.brand .logo{width:38px;height:38px;background:var(--accent);color:var(--accent-ink);
-  border-radius:var(--r-sm);display:grid;place-items:center;font-weight:900;font-size:14px;flex-shrink:0}
+
+/* === FIX: CSS Logo untuk Gambar SVG === */
+.brand .logo{width:38px;height:38px;border-radius:var(--r-sm);
+  display:grid;place-items:center;flex-shrink:0;overflow:hidden}
+.brand .logo img{width:100%;height:100%;object-fit:cover}
+
 .brand .brand-text{min-width:0;overflow:hidden}
 .brand .brand-text b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand .brand-text small{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -76,7 +85,8 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .btn.red{background:var(--red-bg);color:var(--red)}
 .btn.small{padding:6px 10px;font-size:12px;min-height:32px}
 
-main{padding-top:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+/* === FIX: Jarak bawah konten lebih lega agar tak tertutup menu === */
+main{padding-top:16px;padding-bottom:calc(110px + env(safe-area-inset-bottom, 0px))}
 
 .grid{display:grid;gap:14px}
 .grid.two{grid-template-columns:1fr 1fr}
@@ -93,7 +103,6 @@ main{padding-top:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px)
 .small{font-size:12px}
 .positive{color:var(--green)}
 .negative{color:var(--red)}
-
 .amount{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0}
 
 .section{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;
@@ -145,7 +154,8 @@ main{padding-top:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px)
   margin:12px 0;display:flex;align-items:center;gap:10px;backdrop-filter:blur(4px)}
 .hero .runway-box .runway-icon{font-size:22px;line-height:1}
 
-#nav{position:fixed;z-index:30;left:50%;bottom:calc(8px + env(safe-area-inset-bottom,0px));
+/* === FIX: Posisi Nav di iOS agar tidak tenggelam === */
+#nav{position:fixed;z-index:30;left:50%;bottom:calc(16px + env(safe-area-inset-bottom, 0px));
   transform:translateX(-50%);width:min(700px,calc(100vw - 20px));height:64px;
   background:color-mix(in srgb,var(--surface) 94%,transparent);
   backdrop-filter:saturate(150%) blur(16px);-webkit-backdrop-filter:saturate(150%) blur(16px);
@@ -156,25 +166,16 @@ main{padding-top:16px;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px)
   justify-content:center;gap:2px;min-width:0;padding:4px;line-height:1.1}
 #nav button span{font-size:10px;font-weight:700}
 #nav button.active{background:var(--surface-2);color:var(--text)}
-#nav .add{width:56px;height:56px;border-radius:50%;justify-self:center;align-self:center;
-  background:var(--accent);color:var(--accent-ink);transform:translateY(-14px);
-  border:5px solid var(--bg);font-size:24px;font-weight:900;padding:0}
+#nav .add{width:48px;height:48px;border-radius:50%;justify-self:center;align-self:center;
+  background:var(--accent);color:var(--accent-ink);transform:translateY(-12px);
+  border:4px solid var(--bg);font-size:22px;font-weight:900;padding:0;display:flex;align-items:center;justify-content:center}
 
-dialog {
-  width: min(620px, calc(100vw - 16px));
-  max-height: calc(100dvh - 24px);
-  border: 0;
-  border-radius: var(--r-lg);
-  padding: 0;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  display: none; /* Sembunyikan secara default */
-}
-dialog[open] {
-  display: flex; /* Tampilkan sebagai flexbox hanya saat dibuka */
-  flex-direction: column;
+/* === FIX: Dialog tidak muncul jika belum dipanggil === */
+dialog{width:min(620px,calc(100vw - 16px));max-height:calc(100dvh - 24px);
+  border:0;border-radius:var(--r-lg);padding:0;background:var(--surface);color:var(--text);
+  box-shadow:var(--shadow-lg);overflow:hidden;display:none;flex-direction:column}
+dialog[open]{display:flex}
+
 dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
 .modal-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;
   border-bottom:1px solid var(--border);gap:8px}
@@ -198,13 +199,12 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
   background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
 
 .overlay{position:fixed;z-index:80;inset:0;background:var(--bg);overflow:auto;
-  padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  padding-bottom:calc(20px + env(safe-area-inset-bottom, 0px))}
 .onboard{padding-top:20px;max-width:720px}
 .onboard-main{margin-top:32px}
 .onboard-main h1{margin-bottom:16px}
 
 .empty{text-align:center;color:var(--muted);padding:28px 16px;line-height:1.5}
-.hidden{display:none!important}
 .warning{background:var(--orange-bg);color:var(--orange);padding:11px 13px;
   border-radius:var(--r-sm);font-size:13px;line-height:1.5}
 .info{background:var(--blue-bg);color:var(--blue);padding:11px 13px;
@@ -220,7 +220,7 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
   background:var(--surface);border:1px solid var(--border);padding:8px;border-radius:var(--r-sm);gap:8px}
 
 #toast{display:none;position:fixed;z-index:100;right:14px;
-  bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  bottom:calc(96px + env(safe-area-inset-bottom, 0px));
   max-width:calc(100vw - 28px);background:#111713;color:#fff;padding:11px 15px;
   border-radius:var(--r-sm);box-shadow:var(--shadow-lg);font-size:14px;line-height:1.4}
 #toast.show{display:block;animation:toastIn .2s ease}
@@ -247,11 +247,10 @@ dialog::backdrop{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
   .hero{padding:18px;border-radius:var(--r-lg)}
   .card{padding:14px;border-radius:var(--r-md)}
   .bar .brand-text small{display:none}
-  main{padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))}
-  #toast{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+  main{padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px))}
+  #toast{bottom:calc(88px + env(safe-area-inset-bottom, 0px))}
 }
 @media(max-width:380px){
-  .brand .brand-text{display:none}
   #nav{height:60px}
-  #nav .add{width:52px;height:52px}
+  #nav .add{width:44px;height:44px;font-size:20px}
 }
