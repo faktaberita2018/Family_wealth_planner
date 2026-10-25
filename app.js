@@ -365,25 +365,28 @@ async function syncGoldPrices() {
     try {
         let res = await fetch('/api/gold-price');
         let data = await res.json();
-        if (data.success && data.pegadaian) {
+        
+        // Cek apakah sukses DAN harganya lebih dari 0
+        if (data.success && data.pegadaian && data.pegadaian.jualPerGram > 0) {
             let s = setting();
             s.goldPrices = {
-                pegadaian: data.pegadaian.jualPerGram || 0,
+                pegadaian: data.pegadaian.jualPerGram,
                 lastSync: data.timestamp
             };
             
             // Set manual fallback juga agar konsisten
-            if (s.goldPrices.pegadaian > 0) s.goldPrice = s.goldPrices.pegadaian;
+            s.goldPrice = s.goldPrices.pegadaian;
             
             await FWPDB.put('settings', s);
             await refresh();
-            toast('Harga Buyback Pegadaian diperbarui!');
+            toast(`Harga Pegadaian: ${money(s.goldPrices.pegadaian)}`);
         } else {
-            throw new Error('Gagal dari server');
+            throw new Error('API mengembalikan harga 0');
         }
     } catch (e) {
         console.error(e);
-        toast('Gagal sinkronisasi. Cek koneksi atau input manual.');
+        // Beri tahu user untuk input manual
+        toast('Gagal Sync. Masukkan harga manual di menu Lainnya.');
     }
 }
 
