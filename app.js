@@ -5,38 +5,63 @@ const n=v=>Number(String(v||0).replace(/[^0-9.-]/g,''))||0;
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const dateNow=()=>new Date().toISOString();
 
-// === [1] HELPER BARU (format tanggal & parsing rupiah) ===
 function formatDateTime(iso){
     if(!iso) return '—';
     try { return new Date(iso).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}); }
     catch { return iso; }
 }
-function parseRupiah(raw){
-    if(raw==null) return NaN;
-    const s=String(raw).trim();
-    if(!s) return NaN;
-    const cleaned=s.replace(/[^\d.,-]/g,'');
-    if(!cleaned||/^-+$/.test(cleaned)) return NaN;
-    let normalized;
-    if(/,\d{1,2}$/.test(cleaned)) normalized=cleaned.replace(/\./g,'').replace(',','.');
-    else normalized=cleaned.replace(/[.,]/g,'');
-    const num=Number(normalized);
-    return Number.isFinite(num)?num:NaN;
+
+// === HELPER FORMAT RUPIAH ===
+function formatNum(x) {
+    if (x === undefined || x === null || x === '') return '';
+    let raw = String(x).replace(/\D/g, '');
+    if (!raw) return '';
+    return new Intl.NumberFormat('id-ID').format(raw);
 }
-function isValidPrice(x){return Number.isFinite(x)&&x>0}
+
+// Listener otomatis untuk format input angka
+document.addEventListener('input', e => {
+    const t = e.target;
+    if (t.matches('input[inputmode="numeric"], input[type="number"]')) {
+        if (t.type === 'number') {
+            t.type = 'text';
+            t.inputMode = 'numeric';
+        }
+        let raw = t.value.replace(/\D/g, '');
+        if (raw) {
+            t.value = new Intl.NumberFormat('id-ID').format(raw);
+        } else {
+            t.value = '';
+        }
+    }
+});
 
 function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2300)}
 function money(x){return S.privacy?'Rp••••••':new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n(x))}
 function monthName(x){return new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric'}).format(new Date(x+'-01T00:00:00'))}
-function f(label,id,type='text',value='',full=''){return `<div class="field ${full}"><label>${label}</label><input class="input" id="${id}" type="${type}" value="${esc(value)}"></div>`}
+
+// Helper f() diperbarui: type 'number' otomatis jadi text inputmode numeric & diformat
+function f(label,id,type='text',value='',full=''){
+    let extra = type === 'number' ? 'type="text" inputmode="numeric"' : `type="${type}"`;
+    let fmtValue = type === 'number' ? formatNum(value) : value;
+    return `<div class="field ${full}"><label>${label}</label><input class="input" id="${id}" ${extra} value="${esc(fmtValue)}"></div>`
+}
 function v(id){return $('#'+id)?.value||''}
 
-// === [3] MODAL DENGAN OPS + CONFIRM MODAL ===
 function modal(title,body,save,opts={}){
     const cancelLabel = opts.cancelLabel || 'Batal';
     const saveLabel = opts.saveLabel || 'Simpan';
     $('#modalTitle').textContent=title;
     $('#modalBody').innerHTML=body;
+    
+    // Format input number yang mungkin dibuat secara custom tanpa f()
+    $('#modalBody').querySelectorAll('input[type="number"]').forEach(inp => {
+        let val = inp.value;
+        inp.type = 'text';
+        inp.inputMode = 'numeric';
+        if (val) inp.value = new Intl.NumberFormat('id-ID').format(Number(val));
+    });
+
     $('#modalFoot').innerHTML=
         `<button type="button" class="btn ghost" data-action="closeModal">${cancelLabel}</button>`+
         (save?`<button class="btn primary" type="submit">${saveLabel}</button>`:'');
@@ -71,7 +96,6 @@ async function refresh(){
     if(!set?.onboarded)showOnboarding(1)
 }
 
-// === [2] SETTING DENGAN DEFAULT EXPANDED + SOFT MIGRATION + getSourceStatus ===
 function setting(){
     let def = {
         id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used',
@@ -125,8 +149,6 @@ function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 // --- KALKULASI NET WORTH & RUNWAY ---
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
 
-// === [10] getGoldPrice (logika sama, komentar prioritas diperjelas) ===
-// Prioritas: harga spesifik merek/kadar → Pegadaian → goldPrice manual fallback
 function getGoldPrice(goldItem){
     const brand=String(goldItem.brand||'').toLowerCase();
     const karat=String(goldItem.karat||'').toUpperCase();
@@ -190,7 +212,7 @@ function home(){
             </div>
         </div>
         <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
-            <span>💵 Kas: ${money(totalAccountBalance())}</span>
+            <span>💵 Uang: ${money(totalAccountBalance())}</span>
             <span>🧈 Emas: ${money(totalGoldValue())}</span>
             <span>🏠 Aset: ${money(totalAssetValue())}</span>
             <span>📉 Utang: ${money(totalUtang())}</span>
@@ -224,9 +246,62 @@ function wealth(){
 
 function goalsView(){return `<div class="section"><div><h2>Tujuan Keuangan</h2><span class="muted">Satu saldo dapat dialokasikan ke beberapa tujuan.</span></div><button class="btn primary" data-action="addGoal">＋ Tujuan</button></div><div class="grid three">${S.cache.goals.map(g=>{let x=goalValue(g.id),pc=Math.min(100,x/Math.max(1,n(g.target))*100);return `<div class="card"><div style="display:flex;justify-content:space-between"><span style="font-size:26px">${g.icon}</span><span class="badge ${g.status==='used'?'purple':g.status==='achieved'?'green':'blue'}">${g.status}</span></div><h3>${esc(g.name)}</h3><small class="muted">Target ${money(g.target)} · Prioritas ${g.priority}</small><div class="progress" style="margin:14px 0 7px"><i style="width:${pc}%"></i></div><b>${money(x)}</b><small class="muted"> · ${pc.toFixed(1)}%</small><div style="margin-top:14px"><button class="btn ghost" data-allocate="${g.id}">Alokasikan saldo</button> <button class="btn ghost" data-goal-status="${g.id}">Status</button></div></div>`}).join('')||'<div class="card empty">Belum ada tujuan.</div>'}</div>`}
 
-function accountsView(){return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div><div class="grid two">${S.cache.institutions.map(i=>`<div class="card"><div style="display:flex;justify-content:space-between"><div><b>${esc(i.name)}</b><small class="muted">${esc(i.type)}</small></div><button class="btn ghost" data-add-account="${i.id}">＋ Rekening</button></div>${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{let pa=S.cache.pockets.filter(p=>p.accountId===a.id),alloc=pocketAllocated(a.id),ua=unallocated(a);return `<div style="margin-top:15px"><div class="row"><div class="grow"><b>${esc(a.name)}</b>${a.isMain?'<span class="badge green">Utama</span>':''}<small class="muted">Saldo aktual · Kantong ${money(alloc)} · Bebas ${money(ua)}</small></div><b>${money(a.balance)}</b><button class="icon" data-reconcile-account="${a.id}">✎</button><button class="icon" data-add-pocket="${a.id}">＋</button></div>${ua<0?'<div class="warning small">Total kantong melebihi saldo rekening. Lakukan rekonsiliasi.</div>':''}${pa.map(p=>`<div class="row" style="margin-left:17px"><div class="grow"><b>↳ ${esc(p.name)}</b><small class="muted">Alokasi dalam rekening</small></div><b>${money(p.balance)}</b><button class="icon" data-reconcile-pocket="${p.id}">✎</button></div>`).join('')}</div>`}).join('')||'<div class="empty">Belum ada rekening.</div>'}</div>`).join('')}</div>`}
+// === REVISI: TAB REKENING (EDIT & HAPUS) ===
+function accountsView(){
+    return `<div class="section">
+        <div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div>
+        <button class="btn primary" data-action="addInstitution">＋ Institusi</button>
+    </div>
+    <div class="grid two">
+        ${S.cache.institutions.map(i=>`
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <div style="min-width:0;">
+                        <b style="font-size:16px;">${esc(i.name)}</b> <span class="muted small" style="margin-left:4px;">${esc(i.type)}</span>
+                    </div>
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn ghost small" style="padding:4px 8px;" data-add-account="${i.id}">＋ Rek</button>
+                        <button class="icon" style="width:28px; height:28px; font-size:14px;" data-edit-inst="${i.id}" title="Edit Institusi">✎</button>
+                        <button class="icon" style="width:28px; height:28px; font-size:14px; color:var(--red);" data-del-inst="${i.id}" title="Hapus Institusi">×</button>
+                    </div>
+                </div>
+                ${S.cache.accounts.filter(a=>a.institutionId===i.id).map(a=>{
+                    let pa=S.cache.pockets.filter(p=>p.accountId===a.id),
+                        alloc=pocketAllocated(a.id),
+                        ua=unallocated(a);
+                    return `
+                        <div style="margin-top:12px; background:var(--surface-2); padding:10px; border-radius:var(--r-sm);">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                                <div style="flex:1; min-width:140px;">
+                                    <b style="font-size:14px;">${esc(a.name)}</b>${a.isMain?'<span class="badge green" style="margin-left:4px; font-size:10px;">Utama</span>':''}
+                                    <small class="muted" style="display:block; margin-top:2px;">Saldo: <b>${money(a.balance)}</b> · Bebas: ${money(ua)}</small>
+                                </div>
+                                <div style="display:flex; gap:4px;">
+                                    <button class="icon" style="width:28px; height:28px; font-size:14px;" data-add-pocket="${a.id}" title="Tambah Kantong">＋</button>
+                                    <button class="icon" style="width:28px; height:28px; font-size:14px;" data-edit-account="${a.id}" title="Edit Rekening">✎</button>
+                                    <button class="icon" style="width:28px; height:28px; font-size:14px; color:var(--red);" data-del-account="${a.id}" title="Hapus Rekening">×</button>
+                                </div>
+                            </div>
+                            ${ua<0?'<div class="warning small" style="margin-top:8px; padding:6px 10px;">Total kantong melebihi saldo rekening.</div>':''}
+                            ${pa.map(p=>`
+                                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--border); margin-top:8px;">
+                                    <div style="flex:1; min-width:0; padding-left:10px;">
+                                        <b style="font-size:13px;">↳ ${esc(p.name)}</b>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <b style="font-size:13px;">${money(p.balance)}</b>
+                                        <button class="icon" style="width:24px; height:24px; font-size:12px;" data-reconcile-pocket="${p.id}">✎</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }).join('') || '<div class="empty small">Belum ada rekening.</div>'}
+            </div>
+        `).join('')}
+    </div>`;
+}
 
-// === [6] goldView BARU dengan status per-sumber ===
 function sourceCard(src, status){
     const sourceBadge = status.priceSource==='manual'
         ? `<span class="badge purple">Manual</span>`
@@ -308,7 +383,6 @@ function goldView(){
     </div>`;
 }
 
-// --- MODUL ASET TETAP ---
 function assetsView() {
     return `<div class="section">
         <div><h2>Aset Tetap</h2><span class="muted">Kendaraan, Properti, Elektronik.</span></div>
@@ -333,7 +407,6 @@ function assetsView() {
     </div>`
 }
 
-// --- MODUL UTANG & PIUTANG ---
 function debtsView() {
     let utang = S.cache.debts.filter(x=>x.type==='utang'&&x.status==='active');
     let piutang = S.cache.debts.filter(x=>x.type==='piutang'&&x.status==='active');
@@ -405,7 +478,8 @@ let ON={budgetMode:'simple',defaultClosing:'used'};
 async function seed(){
     let set=await FWPDB.get('settings','main');if(set)return;
     await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,goldPrice:2000000,goldPrices:{pegadaian:0,lastSync:null},palacePrices:{'24K':0,'18K':0,'9K':0,lastSync:null}});
-    for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Kas'}])await FWPDB.put('institutions',x)
+    // REVISI: Kas -> Dompet
+    for(let x of[{id:'i1',name:'Bank Jago',type:'Bank'},{id:'i2',name:'BCA',type:'Bank'},{id:'i3',name:'Tunai',type:'Dompet'}])await FWPDB.put('institutions',x)
 }
 
 // --- FITUR CRUD MODAL ---
@@ -413,7 +487,6 @@ async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name',
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
 
-// === [7] fundItem dengan rollback ===
 async function fundItem(iid){
     let x=await FWPDB.get('planItems', iid);
     if(x.fundingStatus==='funded') return toast('Pos sudah didanai.');
@@ -480,8 +553,52 @@ async function allocateGoal(gid){
     })
 }
 
+// === TAMBAHAN: FUNGSI EDIT & HAPUS REKENING/INSTITUSI ===
 async function addInstitution(){modal('Tambah Institusi',`<div class="formgrid">${f('Nama','x_name')}${f('Jenis','x_type','text','Bank')}</div>`,async()=>{await FWPDB.put('institutions',{id:id('i'),name:v('x_name'),type:v('x_type')});closeModal();await refresh()})}
+async function editInstitution(id) {
+    let inst = S.cache.institutions.find(x=>x.id===id);
+    modal('Edit Institusi', `<div class="formgrid">${f('Nama Institusi','x_name','text',inst.name)}${f('Jenis','x_type','text',inst.type)}</div>`, async()=>{
+        inst.name = v('x_name'); inst.type = v('x_type');
+        await FWPDB.put('institutions', inst); closeModal(); await refresh(); toast('Institusi diubah');
+    });
+}
+async function delInstitution(id) {
+    let inst = S.cache.institutions.find(x=>x.id===id);
+    let accts = S.cache.accounts.filter(x=>x.institutionId===id);
+    if (accts.length > 0) {
+        if (!confirm(`Institusi "${inst.name}" memiliki ${accts.length} rekening. Menghapus institusi ini akan menghapus semua rekening dan kantong di dalamnya. Lanjutkan?`)) return;
+        for (let a of accts) {
+            let pockets = S.cache.pockets.filter(p=>p.accountId===a.id);
+            for (let p of pockets) await FWPDB.del('pockets', p.id);
+            await FWPDB.del('accounts', a.id);
+        }
+    } else {
+        if (!confirm(`Hapus institusi "${inst.name}"?`)) return;
+    }
+    await FWPDB.del('institutions', id); await refresh(); toast('Institusi dihapus');
+}
+
 async function addAccount(iid){modal('Tambah Rekening',`<div class="formgrid">${f('Nama rekening','x_name')}${f('Saldo aktual','x_balance','number','0')}<div class="field"><label><input id="x_main" type="checkbox"> Rekening utama</label></div></div>`,async()=>{if($('#x_main').checked)for(let a of S.cache.accounts){a.isMain=false;await FWPDB.put('accounts',a)}await FWPDB.put('accounts',{id:id('a'),institutionId:iid,name:v('x_name'),balance:n(v('x_balance')),isMain:$('#x_main').checked,createdAt:dateNow()});closeModal();await refresh()})}
+async function editAccount(id) {
+    let acct = S.cache.accounts.find(x=>x.id===id);
+    modal('Edit Rekening', `<div class="formgrid">${f('Nama Rekening','x_name','text',acct.name)}${f('Saldo Aktual','x_balance','number',acct.balance)}<div class="field full"><label><input id="x_main" type="checkbox" ${acct.isMain?'checked':''}> Jadikan Rekening Utama</label></div></div>`, async()=>{
+        if($('#x_main').checked) for(let a of S.cache.accounts){ a.isMain=false; await FWPDB.put('accounts',a); }
+        acct.name = v('x_name'); acct.balance = n(v('x_balance')); acct.isMain = $('#x_main').checked;
+        await FWPDB.put('accounts', acct); closeModal(); await refresh(); toast('Rekening diubah');
+    });
+}
+async function delAccount(id) {
+    let acct = S.cache.accounts.find(x=>x.id===id);
+    let pockets = S.cache.pockets.filter(p=>p.accountId===id);
+    if (pockets.length > 0) {
+        if (!confirm(`Rekening "${acct.name}" memiliki ${pockets.length} kantong. Menghapus rekening ini akan menghapus semua kantong di dalamnya. Lanjutkan?`)) return;
+        for (let p of pockets) await FWPDB.del('pockets', p.id);
+    } else {
+        if (!confirm(`Hapus rekening "${acct.name}"?`)) return;
+    }
+    await FWPDB.del('accounts', id); await refresh(); toast('Rekening dihapus');
+}
+
 async function addPocket(aid){modal('Tambah Kantong',`<div class="formgrid">${f('Nama kantong','x_name')}${f('Alokasi saldo','x_balance','number','0')}</div><div class="info small">Kantong adalah bagian dari saldo rekening induk, bukan saldo tambahan.</div>`,async()=>{let a=acct(aid),amount=n(v('x_balance'));if(pocketAllocated(aid)+amount>n(a.balance))return toast('Total kantong melebihi saldo rekening');await FWPDB.put('pockets',{id:id('p'),accountId:aid,name:v('x_name'),balance:amount,createdAt:dateNow()});closeModal();await refresh()})}
 async function reconcileAccount(aid){let a=acct(aid);modal('Rekonsiliasi Rekening',`${f('Saldo aktual','x_balance','number',a.balance)}<div class="warning small">Jika saldo aktual lebih kecil daripada total kantong, sistem akan memberi peringatan tetapi tidak menghapus alokasi.</div>`,async()=>{let old=n(a.balance),neu=n(v('x_balance'));a.balance=neu;await FWPDB.put('accounts',a);await ledger('reconcile','Rekonsiliasi '+a.name,neu-old,{accountId:aid,old,new:neu});closeModal();await refresh()})}
 async function reconcilePocket(pid){let p=pocket(pid),a=acct(p.accountId);modal('Rekonsiliasi Kantong',f('Alokasi kantong','x_balance','number',p.balance),async()=>{let neu=n(v('x_balance')),other=S.cache.pockets.filter(x=>x.accountId===a.id&&x.id!==pid).reduce((s,x)=>s+n(x.balance),0);if(other+neu>n(a.balance))return toast('Kantong melebihi saldo rekening');let old=n(p.balance);p.balance=neu;await FWPDB.put('pockets',p);await ledger('reconcile','Rekonsiliasi kantong '+p.name,0,{pocketId:pid,old,new:neu},true);closeModal();await refresh()})}
@@ -528,7 +645,6 @@ window.toggleKarat = function() {
     }
 };
 
-// === [4] FETCH per-sumber + status per-sumber + modal hasil ===
 async function fetchWithTimeout(url, opts={}, ms=12000){
     const ctrl=new AbortController();
     const timer=setTimeout(()=>ctrl.abort(), ms);
@@ -687,6 +803,103 @@ async function syncGoldPrices(){
     showGoldSyncResultModal(results, beforeStatus);
 }
 
+async function setGoldPrice(preselected='pegadaian'){
+    const s=setting();
+    const gp=s.goldPrices||{};
+    const pp=s.palacePrices||{};
+
+    const buildFields=src=>src==='pegadaian'
+        ? `<div id="goldPriceFields">
+             <div class="field">
+                 <label>Harga per Gram (Rp)</label>
+                 <input class="input" id="x_pegadaian" type="text" inputmode="numeric"
+                        placeholder="1.850.000" value="${esc(formatNum(gp.pegadaian||''))}">
+                 <div class="small muted">Contoh: 1.850.000 atau 1850000</div>
+             </div>
+           </div>`
+        : `<div id="goldPriceFields">
+             <div class="field" style="margin-bottom:8px">
+                 <label>Harga 24K / gram (Rp)</label>
+                 <input class="input" id="x_palace24" type="text" inputmode="numeric"
+                        placeholder="2.269.000" value="${esc(formatNum(pp['24K']||''))}">
+             </div>
+             <div class="field" style="margin-bottom:8px">
+                 <label>Harga 18K / gram (Rp)</label>
+                 <input class="input" id="x_palace18" type="text" inputmode="numeric"
+                        placeholder="1.700.000" value="${esc(formatNum(pp['18K']||''))}">
+             </div>
+             <div class="field">
+                 <label>Harga 9K / gram (Rp)</label>
+                 <input class="input" id="x_palace9" type="text" inputmode="numeric"
+                        placeholder="850.000" value="${esc(formatNum(pp['9K']||''))}">
+             </div>
+             <div class="small muted" style="margin-top:6px">Isi minimal satu kadar. Kosongkan kadar yang tidak dipakai.</div>
+           </div>`;
+
+    modal('Input Harga Manual', `
+        <div class="info small" style="margin-bottom:12px">
+            Harga akan ditandai <b>manual</b> dan tidak akan tertimpa sync otomatis tanpa konfirmasi.
+        </div>
+        <div class="field" style="margin-bottom:12px">
+            <label>Sumber Harga</label>
+            <div class="choice" id="goldSourceChoice" style="grid-template-columns:1fr 1fr;display:grid">
+                <button type="button" data-gold-src="pegadaian" class="${preselected==='pegadaian'?'selected':''}">
+                    <b>Pegadaian</b><br><span class="muted small">Harga per gram</span>
+                </button>
+                <button type="button" data-gold-src="palace" class="${preselected==='palace'?'selected':''}">
+                    <b>The Palace</b><br><span class="muted small">Harga per kadar</span>
+                </button>
+            </div>
+        </div>
+        <div id="goldPriceFieldsContainer">${buildFields(preselected)}</div>
+    `, async () => {
+        const src=document.querySelector('#goldSourceChoice button.selected')?.dataset.goldSrc;
+        if(!src) return toast('Pilih sumber harga');
+        const now=new Date().toISOString();
+        if(src==='pegadaian'){
+            const price=n(v('x_pegadaian'));
+            if(!price||price<=0) return toast('Harga Pegadaian harus angka > 0');
+            s.goldPrices={...(s.goldPrices||{}), pegadaian:price,
+                priceSource:'manual', manualAt:now,
+                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
+            s.goldPrice=price;
+        } else {
+            const p24=n(v('x_palace24'));
+            const p18=n(v('x_palace18'));
+            const p9 =n(v('x_palace9'));
+            const valid24=p24>0, valid18=p18>0, valid9=p9>0;
+            if(!valid24&&!valid18&&!valid9) return toast('Isi minimal satu kadar dengan harga > 0');
+            s.palacePrices={...(s.palacePrices||{}),
+                '24K':valid24?p24:0,
+                '18K':valid18?p18:0,
+                '9K' :valid9 ?p9 :0,
+                priceSource:'manual', manualAt:now,
+                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
+        }
+        try {
+            await FWPDB.put('settings', s);
+            closeModal();
+            await refresh();
+            toast('Harga manual tersimpan');
+        } catch(e){
+            toast('Gagal menyimpan: '+(e?.message||'unknown'));
+        }
+    });
+
+    setTimeout(()=>{
+        document.querySelectorAll('#goldSourceChoice [data-gold-src]').forEach(btn=>{
+            btn.addEventListener('click', e=>{
+                e.preventDefault();
+                document.querySelectorAll('#goldSourceChoice button')
+                    .forEach(b=>b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const c=document.querySelector('#goldPriceFieldsContainer');
+                if(c) c.innerHTML=buildFields(btn.dataset.goldSrc);
+            });
+        });
+    }, 0);
+}
+
 async function sellGold(id) {
     let g = await FWPDB.get('goldItems', id);
     if(!g || g.status === 'sold') return;
@@ -749,105 +962,6 @@ async function addDebt(){
     });
 }
 
-// === [5] setGoldPrice BARU: pilih sumber + input manual per-kadar ===
-async function setGoldPrice(preselected='pegadaian'){
-    const s=setting();
-    const gp=s.goldPrices||{};
-    const pp=s.palacePrices||{};
-
-    const buildFields=src=>src==='pegadaian'
-        ? `<div id="goldPriceFields">
-             <div class="field">
-                 <label>Harga per Gram (Rp)</label>
-                 <input class="input" id="x_pegadaian" type="text" inputmode="numeric"
-                        placeholder="1.850.000" value="${esc(gp.pegadaian||'')}">
-                 <div class="small muted">Contoh: 1.850.000 atau 1850000</div>
-             </div>
-           </div>`
-        : `<div id="goldPriceFields">
-             <div class="field" style="margin-bottom:8px">
-                 <label>Harga 24K / gram (Rp)</label>
-                 <input class="input" id="x_palace24" type="text" inputmode="numeric"
-                        placeholder="2.269.000" value="${esc(pp['24K']||'')}">
-             </div>
-             <div class="field" style="margin-bottom:8px">
-                 <label>Harga 18K / gram (Rp)</label>
-                 <input class="input" id="x_palace18" type="text" inputmode="numeric"
-                        placeholder="1.700.000" value="${esc(pp['18K']||'')}">
-             </div>
-             <div class="field">
-                 <label>Harga 9K / gram (Rp)</label>
-                 <input class="input" id="x_palace9" type="text" inputmode="numeric"
-                        placeholder="850.000" value="${esc(pp['9K']||'')}">
-             </div>
-             <div class="small muted" style="margin-top:6px">Isi minimal satu kadar. Kosongkan kadar yang tidak dipakai.</div>
-           </div>`;
-
-    modal('Input Harga Manual', `
-        <div class="info small" style="margin-bottom:12px">
-            Harga akan ditandai <b>manual</b> dan tidak akan tertimpa sync otomatis tanpa konfirmasi.
-        </div>
-        <div class="field" style="margin-bottom:12px">
-            <label>Sumber Harga</label>
-            <div class="choice" id="goldSourceChoice" style="grid-template-columns:1fr 1fr;display:grid">
-                <button type="button" data-gold-src="pegadaian" class="${preselected==='pegadaian'?'selected':''}">
-                    <b>Pegadaian</b><br><span class="muted small">Harga per gram</span>
-                </button>
-                <button type="button" data-gold-src="palace" class="${preselected==='palace'?'selected':''}">
-                    <b>The Palace</b><br><span class="muted small">Harga per kadar</span>
-                </button>
-            </div>
-        </div>
-        <div id="goldPriceFieldsContainer">${buildFields(preselected)}</div>
-    `, async () => {
-        const src=document.querySelector('#goldSourceChoice button.selected')?.dataset.goldSrc;
-        if(!src) return toast('Pilih sumber harga');
-        const now=new Date().toISOString();
-        if(src==='pegadaian'){
-            const price=parseRupiah(v('x_pegadaian'));
-            if(!isValidPrice(price)) return toast('Harga Pegadaian harus angka > 0');
-            s.goldPrices={...(s.goldPrices||{}), pegadaian:price,
-                priceSource:'manual', manualAt:now,
-                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
-            s.goldPrice=price;
-        } else {
-            const p24=parseRupiah(v('x_palace24'));
-            const p18=parseRupiah(v('x_palace18'));
-            const p9 =parseRupiah(v('x_palace9'));
-            const valid24=isValidPrice(p24), valid18=isValidPrice(p18), valid9=isValidPrice(p9);
-            if(!valid24&&!valid18&&!valid9) return toast('Isi minimal satu kadar dengan harga > 0');
-            s.palacePrices={...(s.palacePrices||{}),
-                '24K':valid24?p24:0,
-                '18K':valid18?p18:0,
-                '9K' :valid9 ?p9 :0,
-                priceSource:'manual', manualAt:now,
-                lastSuccess:now, lastAttempt:now, lastSync:now, lastError:null};
-        }
-        try {
-            await FWPDB.put('settings', s);
-            closeModal();
-            await refresh();
-            toast('Harga manual tersimpan');
-        } catch(e){
-            toast('Gagal menyimpan: '+(e?.message||'unknown'));
-        }
-    });
-
-    setTimeout(()=>{
-        document.querySelectorAll('#goldSourceChoice [data-gold-src]').forEach(btn=>{
-            btn.addEventListener('click', e=>{
-                e.preventDefault();
-                document.querySelectorAll('#goldSourceChoice button')
-                    .forEach(b=>b.classList.remove('selected'));
-                btn.classList.add('selected');
-                const c=document.querySelector('#goldPriceFieldsContainer');
-                if(c) c.innerHTML=buildFields(btn.dataset.goldSrc);
-            });
-        });
-    }, 0);
-}
-
-// === [8] transfer dengan rollback ===
 async function transfer(){
     modal('Transfer Saldo',
         `<div class="formgrid">
@@ -878,11 +992,26 @@ async function transfer(){
         });
 }
 
+// === REVISI: TUTUP BULAN DENGAN INSTRUKSI & LAYOUT BARU ===
 async function closing(){
     let p=plan(),ps=pstats(p),set=setting(),it=items(p.id);
-    let rows=set.budgetMode==='simple'?'<div class="info">Mode Ringkas: seluruh alokasi dianggap terpakai. Kamu hanya perlu menangani Sisa Rencana atau Minus.</div>':it.map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">Plan ${money(x.amount)}</small></div><input class="input" id="rem_${x.id}" type="number" value="0" placeholder="Sisa"></div>`).join('');
     
-    modal('Tutup Bulan',`${rows}<div class="card" style="margin-top:13px"><b>Sisa Rencana: <span class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</span></b></div><div class="formgrid" style="margin-top:13px"><div class="field"><label>Tindakan</label><select id="x_action" class="input">${ps.surplus<0?'<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>':'<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>'}</select></div><div class="field"><label>Tujuan/Rekening opsional</label><select id="x_target" class="input"><option value="">Pilih</option>${S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}${[...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('')}</select></div></div>`,async()=>{
+    let rows = set.budgetMode==='simple' 
+        ? '<div class="info">Mode Ringkas: seluruh alokasi dianggap terpakai. Kamu hanya perlu menangani Sisa Rencana atau Minus.</div>' 
+        : `<div class="info small" style="margin-bottom:12px">Masukkan sisa uang dari pos ini yang <b>tidak terpakai</b>. Kosongkan atau isi 0 jika uangnya habis terpakai.</div>` +
+          it.map(x=>`
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 0; border-bottom:1px solid var(--border);">
+                <div style="flex:1; min-width:0;">
+                    <b style="display:block; font-size:14px; line-height:1.3; word-break:break-word;">${esc(x.name)}</b>
+                    <small class="muted">Plan: ${money(x.amount)}</small>
+                </div>
+                <div style="width:130px; flex-shrink:0;">
+                    <input class="input" id="rem_${x.id}" type="text" inputmode="numeric" value="0" placeholder="Sisa" style="padding:8px 10px; min-height:36px; font-size:14px;">
+                </div>
+            </div>
+          `).join('');
+    
+    modal('Tutup Bulan',`${rows}<div class="card" style="margin-top:13px; padding:12px;"><b>Sisa Rencana: <span class="${ps.surplus<0?'negative':'positive'}">${money(ps.surplus)}</span></b></div><div class="formgrid" style="margin-top:13px"><div class="field"><label>Tindakan</label><select id="x_action" class="input">${ps.surplus<0?'<option value="deficit_carry">Bawa minus ke bulan berikutnya</option><option value="deficit_source">Tutup minus dari rekening</option><option value="record_only">Catat tanpa ubah saldo</option>':'<option value="goal">Alokasikan ke tujuan</option><option value="carry">Bawa ke bulan berikutnya</option><option value="main">Masuk rekening utama</option><option value="stay">Tetap tanpa perubahan saldo</option>'}</select></div><div class="field"><label>Tujuan/Rekening opsional</label><select id="x_target" class="input"><option value="">Pilih</option>${S.cache.goals.map(g=>`<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}${[...S.cache.accounts,...S.cache.pockets].map(x=>`<option value="s:${x.id}">${esc(x.name)}</option>`).join('')}</select></div></div>`,async()=>{
         let remain=0;if(set.budgetMode!=='simple')it.forEach(x=>remain+=n(v('rem_'+x.id)));
         let closeAmount=ps.surplus+remain,action=v('x_action'),target=v('x_target');
         p.status='closed';p.closedAt=dateNow();p.closing={plannedSurplus:ps.surplus,reportedRemain:remain,finalAmount:closeAmount,action,target};
@@ -938,7 +1067,6 @@ function download(name,text,type){let u=URL.createObjectURL(new Blob([text],{typ
 
 function shift(d){let x=new Date(S.month+'-01');x.setMonth(x.getMonth()+d);S.month=x.toISOString().slice(0,7);render()}
 
-// === [9] actions mapping dengan setGoldPrice(arg) & syncGold ===
 const actions={
     closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
     transfer, closing, copyPlan, preferences, backup,
@@ -971,12 +1099,21 @@ document.addEventListener('click',async e=>{
     }
     if(t.dataset.wealth){S.wealth=t.dataset.wealth;render();return}
     
+    // Aksi Spesifik
     if(t.dataset.fund)return fundItem(t.dataset.fund);
     if(t.dataset.allocate)return allocateGoal(t.dataset.allocate);
+    
     if(t.dataset.addAccount)return addAccount(t.dataset.addAccount);
+    if(t.dataset.editAccount)return editAccount(t.dataset.editAccount);
+    if(t.dataset.delAccount)return delAccount(t.dataset.delAccount);
+    
+    if(t.dataset.editInst)return editInstitution(t.dataset.editInst);
+    if(t.dataset.delInst)return delInstitution(t.dataset.delInst);
+    
     if(t.dataset.addPocket)return addPocket(t.dataset.addPocket);
     if(t.dataset.reconcileAccount)return reconcileAccount(t.dataset.reconcileAccount);
     if(t.dataset.reconcilePocket)return reconcilePocket(t.dataset.reconcilePocket);
+    
     if(t.dataset.sellGold) return sellGold(t.dataset.sellGold);
     
     if(t.dataset.delAsset){
@@ -1013,6 +1150,26 @@ $('#restoreFile').addEventListener('change',e=>{
         try{await FWPDB.restore(JSON.parse(r.result));await refresh();toast('Backup dipulihkan')}catch{toast('Backup tidak valid')}
     };
     r.readAsText(file);e.target.value=''
+});
+
+// === FIX: Menyembunyikan Nav saat Keyboard Muncul ===
+document.addEventListener('focusin', (e) => {
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+    document.body.classList.add('keyboard-open');
+  }
+});
+
+document.addEventListener('focusout', (e) => {
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA' && active.tagName !== 'SELECT')) {
+        document.body.classList.remove('keyboard-open');
+      }
+    }, 50);
+  }
 });
 
 (async()=>{await FWPDB.open();await seed();await refresh();if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{})})();
