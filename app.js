@@ -535,47 +535,79 @@ async function syncGlobal() {
     }
 }
 
+// GANTI FUNGSI syncGlobal DAN syncBrand DENGAN INI
+
+async function syncGlobal() {
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Sync...'; btn.disabled = true;
+
+    try {
+        // Global kita gunakan harga Antam 1 Gram sebagai acuan standar
+        const res = await fetchWithTimeout('/api/gold-prices');
+        const data = await res.json();
+        
+        if (data.success && data.data.antam && data.data.antam.sell > 0) {
+            const s = setting();
+            s.globalGoldPrice = data.data.antam.sell;
+            s.globalGoldSync = { source: 'api', time: dateNow() };
+            await FWPDB.put('settings', s);
+            await refresh(); manageGoldPrices(); toast('Harga Global (Antam) berhasil ditarik');
+        } else {
+            throw Error('Data Antam tidak ditemukan di API');
+        }
+    } catch (e) {
+        toast('Gagal Sync Global: ' + e.message);
+        btn.innerHTML = originalText; btn.disabled = false;
+    }
+}
+
 async function syncBrand(brand) {
     const btn = event.target.closest('button');
-    const isApi = btn.dataset.isapi === 'true';
     const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Sync...';
-    btn.disabled = true;
+    btn.innerHTML = '⏳ Sync...'; btn.disabled = true;
 
     const s = setting();
     s.brandSync = s.brandSync || {};
 
     try {
-        if (isApi) {
-            if (brand === 'Pegadaian Digital') {
-                const res = await fetchWithTimeout('/api/gold-price');
-                const data = await res.json();
-                if (data.success && data.pegadaian?.jualPerGram) {
-                    s.brandPrices[brand] = Number(data.pegadaian.jualPerGram);
-                    s.brandSync[brand] = { source: 'api', time: dateNow() };
-                } else throw Error('Respon Pegadaian tidak valid');
-            } else if (brand === 'The Palace') {
-                const res = await fetchWithTimeout('/api/palace-gold-price');
-                const data = await res.json();
-                if (data.success && data.palace?.['24K']) {
-                    s.brandPrices[brand] = Number(data.palace['24K']);
-                    s.brandSync[brand] = { source: 'api', time: dateNow() };
-                } else throw Error('Respon The Palace tidak valid');
-            } else {
-                throw Error('API belum diimplementasikan untuk merek ini');
-            }
+        // Tarik data terbaru dari API Scraper kita
+        const res = await fetchWithTimeout('/api/gold-prices');
+        const data = await res.json();
+        if (!data.success) throw Error('Gagal mengambil data dari API');
+
+        const apiData = data.data;
+        let newPrice = 0;
+
+        // Petakan berdasarkan nama merek
+        if (brand === 'Pegadaian Digital' && apiData.pegadaian?.buyback) {
+            newPrice = apiData.pegadaian.buyback;
+        } else if (brand === 'Antam' && apiData.antam?.buyback) {
+            newPrice = apiData.antam.buyback;
+        } else if (brand === 'UBS Gold' && apiData.ubs?.buyback) {
+            newPrice = apiData.ubs.buyback;
+        } else if (brand === 'Galeri 24' && apiData.galeri24?.buyback) {
+            newPrice = apiData.galeri24.buyback;
+        } else if (brand === 'The Palace') {
+             // Karena The Palace pakai API terpisah di aplikasi lama, kita bisa fallback ke Global
+             newPrice = s.globalGoldPrice; 
         } else {
-            // Sync ke Harga Global
-            s.brandPrices[brand] = s.globalGoldPrice;
-            s.brandSync[brand] = { source: 'global', time: dateNow() };
+            // Jika merek tidak ada di scraper (misal Sinar Jaya), fallback ke Global
+            newPrice = s.globalGoldPrice;
         }
-        
-        await FWPDB.put('settings', s);
-        await refresh(); manageGoldPrices(); toast(`Harga ${brand} berhasil diperbarui`);
+
+        if (newPrice > 0) {
+            s.brandPrices[brand] = newPrice;
+            s.brandSync[brand] = { source: 'api', time: dateNow() };
+            await FWPDB.put('settings', s);
+            await refresh(); manageGoldPrices(); toast(`Harga ${brand} berhasil diperbarui`);
+        } else {
+            throw Error('Harga tidak tersedia di sumber');
+        }
+
     } catch (e) {
         toast(`Gagal sync ${brand}: ` + e.message);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+        btn.innerHTML = originalText; btn.disabled = false;
     }
 }
 
