@@ -2,8 +2,8 @@ const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),pr
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-// === URL GOOGLE SHEET CSV ===
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1-Oaze_mLgvubfS7TnPhUOYaiI6Di-_4EvdyOs-IVsIQ/export?format=csv";
+// === URL GOOGLE SHEET CSV BARU ===
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1eTYvw86XxX4U4W-BUAe2EBmAelt2sR6NryCqFrbyFiw/export?format=csv";
 
 // === FUNGSI PEMBACA ANGKA (Anti-Bug) ===
 const n=v=>{
@@ -544,14 +544,27 @@ async function fetchSheetPrices() {
     
     const lines = text.split('\n');
     let prices = {};
+    
+    // Mulai dari baris 1 (baris 0 adalah header)
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        const parts = line.split(',');
-        if (parts.length >= 2) {
-            const brand = parts[0].replace(/"/g, '').trim();
-            const price = parseInt(parts[1].replace(/[^0-9]/g, '')) || 0;
-            if (brand && price > 0) prices[brand] = price;
+        
+        // Split CSV aman
+        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        
+        // Pastikan ada minimal 4 kolom (A, B, C, D)
+        if (parts.length >= 4) {
+            const brand = parts[0].replace(/"/g, '').trim(); // Kolom A: Brand
+            
+            // Kolom D (Harga Buyback). Bersihkan titik/koma dan jadikan angka
+            const priceStr = parts[3].replace(/[^0-9]/g, ''); 
+            const price = parseInt(priceStr) || 0;
+            
+            // Hanya masukkan jika brand ada dan harga > 0
+            if (brand && price > 0) {
+                prices[brand] = price;
+            }
         }
     }
     return prices;
@@ -564,13 +577,16 @@ async function syncGlobal() {
 
     try {
         const prices = await fetchSheetPrices();
-        const globalPrice = prices['Antam'] || 1950000; 
+        
+        // Gunakan Antam sebagai acuan global, fallback ke UBS / default
+        const globalPrice = prices['Antam'] || prices['UBS'] || 1950000; 
+        
         const s = setting();
         s.globalGoldPrice = globalPrice;
         s.globalGoldSync = { source: 'sheet', time: dateNow() };
         await FWPDB.put('settings', s);
         await refresh(); manageGoldPrices(); 
-        toast('Harga Global (Antam) ditarik dari Sheet');
+        toast('Harga Global (Antam) ditarik: ' + money(globalPrice));
     } catch (e) {
         toast('Gagal Sync: ' + e.message);
         btn.innerHTML = originalText; btn.disabled = false;
@@ -588,9 +604,12 @@ async function syncBrand(brand) {
         s.brandSync = s.brandSync || {};
 
         let newPrice = 0;
+        
+        // Smart Matching: cocokkan nama brand aplikasi dengan nama di Sheet
         for (const [key, val] of Object.entries(prices)) {
             if (brand.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(brand.toLowerCase())) {
-                newPrice = val; break;
+                newPrice = val; 
+                break;
             }
         }
 
@@ -601,11 +620,12 @@ async function syncBrand(brand) {
             await refresh(); manageGoldPrices(); 
             toast(`Harga ${brand} ditarik: ` + money(newPrice));
         } else {
+            // Fallback ke harga global jika merek tidak ditemukan di Sheet
             s.brandPrices[brand] = s.globalGoldPrice;
             s.brandSync[brand] = { source: 'global', time: dateNow() };
             await FWPDB.put('settings', s);
             await refresh(); manageGoldPrices(); 
-            toast(`Harga ${brand} tidak ada di sheet, pakai Harga Global.`);
+            toast(`Merek ${brand} tidak ada di Sheet, menggunakan Harga Global.`);
         }
     } catch (e) {
         toast(`Gagal sync ${brand}: ` + e.message);
@@ -966,7 +986,7 @@ document.addEventListener('focusout', (e) => {
   }
 });
 
-// === ONBOARDING (SEMPAT HILANG) ===
+// === ONBOARDING ===
 function showOnboarding(step){
     $('#onboarding').classList.remove('hidden');
     let q=step===1?`<div class="onboard-main"><div class="eyebrow">Langkah 1/3</div><h1>Cara mengelola anggaran?</h1><div class="choice" id="onChoice"><button data-v="simple" class="selected"><b>Ringkas</b><br><span class="muted">Rencana tanpa transaksi harian.</span></button><button data-v="closing"><b>Closing ringan</b><br><span class="muted">Isi sisa saat akhir bulan.</span></button><button data-v="detailed"><b>Lebih rinci</b><br><span class="muted">Status funded dan realisasi opsional.</span></button></div><button class="btn primary" data-on-next="2">Lanjut</button></div>`:
