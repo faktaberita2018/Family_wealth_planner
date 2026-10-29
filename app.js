@@ -2,9 +2,6 @@ const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),pr
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-// === URL GOOGLE SHEET CSV BARU ===
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1eTYvw86XxX4U4W-BUAe2EBmAelt2sR6NryCqFrbyFiw/export?format=csv";
-
 // === FUNGSI PEMBACA ANGKA (Anti-Bug) ===
 const n=v=>{
     if (typeof v === 'number') return v;
@@ -133,30 +130,24 @@ async function refresh(){
 }
 
 function setting(){
-    let def = {
-        id:'main', onboarded:false, budgetMode:'simple', defaultClosing:'used',
-        surplusBehavior:'ask', strictBalance:false, theme:'light', privacy:false,
-        ownerName:'Kamu', 
-        globalGoldPrice: 1950000,
-        globalGoldSync: { source:'default', time:null },
-        brandPrices: {},
-        brandSync: {}
-    };
-    let s = S.cache.settings.find(x=>x.id==='main') || def;
-    if(!s.globalGoldPrice) s.globalGoldPrice = 1950000;
-    if(!s.globalGoldSync) s.globalGoldSync = { source:'default', time:null };
-    if(!s.brandPrices) s.brandPrices = {};
-    if(!s.brandSync) s.brandSync = {};
-    return s;
+    const def={id:'main',onboarded:false,budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,ownerName:'Kamu'};
+    return S.cache.settings.find(x=>x.id==='main')||def;
 }
-
-function getGoldPrice(brand, purity = 24) {
-    const s = setting();
-    let basePrice = s.brandPrices[brand] || s.globalGoldPrice;
-    if (purity < 24 && purity > 0) return basePrice * (purity / 24);
-    return basePrice;
+function getGoldPrice(asset,purity=24,side='buyback'){
+    let price=GoldMarket.priceFor(asset,side);
+    // Harga manual perhiasan sudah merupakan harga per gram sesuai kadar.
+    // Harga acuan Antam 24K baru dikalikan proporsi kadar.
+    if(asset?.priceMode!=='manual'&&purity<24&&purity>0) price*=purity/24;
+    return price;
 }
-
+function goldAssetLabel(x){return x.providerLabel||x.brandLabel||x.merchantLabel||'Tanpa merek'}
+function goldStatusHtml(asset){
+    const st=GoldMarket.statusFor(asset), fmt=x=>formatDateTime(x), disclosure=asset?.priceDisclosure?`<br><b>${esc(asset.priceDisclosure)}</b>`:'';
+    if(st.kind==='success') return `<div class="info small">🟢 <b>Data Terkini</b><br>Terakhir diperbarui: ${fmt(st.lastSuccess)} WIB${disclosure}</div>`;
+    if(st.kind==='failed') return `<div class="warning small">🟡 <b>Data Tidak Terkini</b><br>Percobaan pembaruan terakhir: ${fmt(st.lastAttempt)} WIB<br>Menampilkan data valid dari: ${fmt(st.lastSuccess)} WIB</div>`;
+    if(st.kind==='manual') return `<div class="info small">✍️ <b>Harga Manual</b><br>${esc(st.message)}</div>`;
+    return `<div class="warning small">⚪ <b>${esc(st.title)}</b><br>${esc(st.message||'Harga belum tersedia.')}${st.lastAttempt?`<br>Percobaan terakhir: ${fmt(st.lastAttempt)} WIB`:''}</div>`;
+}
 function acct(id){return S.cache.accounts.find(x=>x.id===id)}
 function pocket(id){return S.cache.pockets.find(x=>x.id===id)}
 function goal(id){return S.cache.goals.find(x=>x.id===id)}
@@ -165,9 +156,9 @@ function sourceName(id){return source(id)?.name||'Tanpa perubahan saldo'}
 function ownerName(oid){return S.cache.owners.find(x=>x.id===oid)?.name||'Tidak diketahui'}
 
 function totalAccountBalance(){return S.cache.accounts.reduce((a,x)=>a+n(x.balance),0)}
-function totalGoldDigitalValue(){return S.cache.goldAccounts.reduce((a,x)=> a + (n(x.balanceGrams) * getGoldPrice(x.brand)), 0)}
-function totalGoldPhysicalValue(){return S.cache.goldPhysical.filter(x=>x.status==='owned').reduce((a,x)=> a + (n(x.weight) * getGoldPrice(x.brand)), 0)}
-function totalGoldJewelryValue(){return S.cache.goldJewelry.filter(x=>x.status==='owned').reduce((a,x)=> a + (n(x.weight) * getGoldPrice(x.brand, n(x.purity))), 0)}
+function totalGoldDigitalValue(){return S.cache.goldAccounts.reduce((a,x)=> a + (n(x.balanceGrams) * getGoldPrice(x)), 0)}
+function totalGoldPhysicalValue(){return S.cache.goldPhysical.filter(x=>x.status==='owned').reduce((a,x)=> a + (n(x.weight) * getGoldPrice(x)), 0)}
+function totalGoldJewelryValue(){return S.cache.goldJewelry.filter(x=>x.status==='owned').reduce((a,x)=> a + (n(x.weight) * getGoldPrice(x, n(x.purity))), 0)}
 function totalGoldValue(){ return totalGoldDigitalValue() + totalGoldPhysicalValue() + totalGoldJewelryValue()}
 function totalAssetValue(){ return S.cache.assets.reduce((a,x)=>a+n(x.value),0) }
 function totalPiutang(){ return S.cache.debts.filter(x=>x.type==='piutang'&&x.status==='active').reduce((a,x)=>a+n(x.amount),0) }
@@ -199,10 +190,18 @@ function pstats(p){
 function getGoalAllocations(gid) { return S.cache.goalAllocations.filter(x=>x.goalId===gid && x.status==='active'); }
 function getSourceAllocated(sourceId) { return S.cache.goalAllocations.filter(x=>x.sourceId===sourceId && x.status==='active').reduce((a,x)=>a+n(x.amount), 0); }
 function goalValue(gid){
-    return getGoalAllocations(gid).reduce((a, x) => {
-        if (x.type === 'gram') return a + (n(x.amount) * setting().globalGoldPrice);
-        return a + n(x.amount);
-    }, 0);
+    return getGoalAllocations(gid).reduce((a,x)=>{
+        if(x.type==='gram'||x.type==='gold_digital'){
+            const asset=S.cache.goldAccounts.find(g=>g.id===x.sourceId);
+            return a+(n(x.amount)*getGoldPrice(asset));
+        }
+        if(x.type==='gold_physical'){
+            const asset=S.cache.goldPhysical.find(g=>g.id===x.sourceId);
+            // Alokasi fisik lama dapat berupa nominal; gunakan apa adanya bila bukan gram.
+            return a+n(x.amount);
+        }
+        return a+n(x.amount);
+    },0);
 }
 
 function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,more:more}[S.page];$('#view').innerHTML=fn()}
@@ -338,302 +337,43 @@ function accountsView(){
 
 // === UI EMAS ===
 function goldView(){
-    if(!S.goldTab) S.goldTab = 'digital';
-    let btnText = "＋ Tambah Akun Digital";
-    if(S.goldTab === 'physical') btnText = "＋ Tambah Kepingan Fisik";
-    if(S.goldTab === 'jewelry') btnText = "＋ Tambah Perhiasan";
-
-    let content = '';
-    if(S.goldTab === 'digital') {
-        content = `<div class="grid two" style="margin-top:15px">
-            ${S.cache.goldAccounts.map(acc => {
-                let price = getGoldPrice(acc.brand);
-                let val = n(acc.balanceGrams) * price;
-                let avg = n(acc.avgCost);
-                if (avg === 0 && n(acc.balanceGrams) > 0) avg = price;
-                
-                let modal = avg * n(acc.balanceGrams);
-                let pl = val - modal;
-                let avail = n(acc.balanceGrams) - (getSourceAllocated(acc.id) / price);
-                let syncInfo = setting().brandSync[acc.brand] || setting().globalGoldSync;
-
-                return `<div class="card" style="border-top:4px solid var(--orange)">
-                    <div style="display:flex; justify-content:space-between"><span class="badge orange">${esc(acc.brand)}</span><span class="badge blue" style="font-size:10px">${esc(ownerName(acc.ownerId))}</span></div>
-                    <h3 style="margin:10px 0">${esc(acc.name)}</h3>
-                    <div style="display:flex; justify-content:space-between; align-items:flex-end">
-                        <div><small class="muted" style="display:block">Saldo Emas</small><b style="font-size:20px">${n(acc.balanceGrams)} <small>gr</small></b></div>
-                        <div style="text-align:right"><small class="muted" style="display:block">Tersedia</small><b>${Math.max(0, avail).toFixed(2)} gr</b></div>
-                    </div>
-                    <div style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px; font-size:13px">
-                        <div style="display:flex; justify-content:space-between"><span class="muted">Harga Pasar</span><b>${money(price)}/gr</b></div>
-                        <div style="font-size:10px; color:var(--muted); text-align:right; margin-bottom:4px;">Sync: ${formatDateTime(syncInfo.time)} (${syncInfo.source})</div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted">Nilai Aset</span><b>${money(val)}</b></div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted">Rata-rata Beli</span><b>${money(avg)}/gr</b></div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted">P/L</span><b class="${pl>=0?'positive':'negative'}">${pl>=0?'+':''}${money(pl)}</b></div>
-                    </div>
-                    <div style="display:flex; gap:6px; margin-top:12px"><button class="btn primary" style="flex:1" data-buy-gold="${acc.id}">Beli</button><button class="btn ghost" style="flex:1" data-sell-gold-digital="${acc.id}">Jual</button></div>
-                </div>`;
-            }).join('') || '<div class="empty" style="grid-column:1/-1">Belum ada akun emas digital.</div>'}
-        </div>`;
-    } else if (S.goldTab === 'physical') {
-        content = `<div class="grid three" style="margin-top:15px">
-            ${S.cache.goldPhysical.filter(g=>g.status==='owned').map(g => {
-                let price = getGoldPrice(g.brand), val = n(g.weight) * price;
-                let avg = n(g.buyPrice) / n(g.weight);
-                if (avg === 0) avg = price;
-                let pl = val - n(g.buyPrice);
-                let syncInfo = setting().brandSync[g.brand] || setting().globalGoldSync;
-
-                return `<div class="card">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px"><span class="badge blue">${esc(g.brand)}</span><span class="badge">${esc(ownerName(g.ownerId))}</span></div>
-                    <h3>${esc(g.name)}</h3><small class="muted">${n(g.weight)} gram</small>
-                    <div style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px">
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">Harga Pasar</span><b class="small">${money(price)}</b></div>
-                        <div style="font-size:10px; color:var(--muted); text-align:right; margin-bottom:4px;">Sync: ${formatDateTime(syncInfo.time)}</div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">Nilai Aset</span><b class="small">${money(val)}</b></div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">P/L</span><b class="small ${pl>=0?'positive':'negative'}">${pl>=0?'+':''}${money(pl)}</b></div>
-                    </div>
-                    <button class="btn dark" style="margin-top:10px; width:100%" data-sell-gold-physical="${g.id}">Jual Kepingan</button>
-                </div>`;
-            }).join('') || '<div class="empty" style="grid-column:1/-1">Belum ada emas fisik.</div>'}
-        </div>`;
-    } else {
-        content = `<div class="grid two" style="margin-top:15px">
-            ${S.cache.goldJewelry.filter(g=>g.status==='owned').map(g => {
-                let price = getGoldPrice(g.brand, n(g.purity)), val = n(g.weight) * price;
-                let syncInfo = setting().brandSync[g.brand] || setting().globalGoldSync;
-                
-                return `<div class="card">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px"><span class="badge purple">${esc(g.brand)}</span><span class="badge">${esc(ownerName(g.ownerId))}</span></div>
-                    <h3>${esc(g.name)}</h3><small class="muted">${n(g.weight)} gram · ${esc(g.purity||'?')}K</small>
-                    <div style="margin-top:10px; border-top:1px dashed var(--border); padding-top:10px">
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">Estimasi Pasar</span><b class="small">${money(price)}/gr</b></div>
-                        <div style="font-size:10px; color:var(--muted); text-align:right; margin-bottom:4px;">Sync: ${formatDateTime(syncInfo.time)}</div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">Nilai Aset</span><b class="small">${money(val)}</b></div>
-                        <div style="display:flex; justify-content:space-between"><span class="muted small">Beli</span><b class="small">${money(g.buyPrice)}</b></div>
-                    </div>
-                    <button class="btn dark" style="margin-top:10px; width:100%" data-sell-gold-jewelry="${g.id}">Jual Perhiasan</button>
-                </div>`;
-            }).join('') || '<div class="empty" style="grid-column:1/-1">Belum ada emas perhiasan.</div>'}
-        </div>`;
-    }
-
-    return `<div class="section" style="margin-bottom:10px">
-        <div><h2>Aset Emas</h2><span class="muted small">Harga Global: <b>${money(setting().globalGoldPrice)}</b>/gr</span></div>
-        <div class="row-actions"><button class="btn ghost" data-action="manageGoldPrices">⚙️ Atur Harga</button></div>
-    </div>
-    <div class="tabs" style="margin-top:15px">
-        <button class="tab ${S.goldTab==='digital'?'active':''}" data-goldtab="digital">Digital</button>
-        <button class="tab ${S.goldTab==='physical'?'active':''}" data-goldtab="physical">Fisik (LM)</button>
-        <button class="tab ${S.goldTab==='jewelry'?'active':''}" data-goldtab="jewelry">Perhiasan</button>
-    </div>
-    <button class="btn primary" style="width:100%; margin-top:15px;" data-action="addGold">${btnText}</button>
-    ${content}`;
+    if(!S.goldTab) S.goldTab='digital';
+    const title=S.goldTab==='digital'?'＋ Tambah Akun Digital':S.goldTab==='physical'?'＋ Tambah Kepingan Fisik':'＋ Tambah Perhiasan';
+    const map={digital:S.cache.goldAccounts,physical:S.cache.goldPhysical.filter(x=>x.status==='owned'),jewelry:S.cache.goldJewelry.filter(x=>x.status==='owned')};
+    const rows=map[S.goldTab]||[];
+    const cards=rows.map(x=>{
+      const purity=S.goldTab==='jewelry'?n(x.purity):24;
+      const price=getGoldPrice(x,purity), weight=n(x.balanceGrams||x.weight), value=weight*price;
+      return `<div class="card"><div style="display:flex;justify-content:space-between"><span class="badge blue">${esc(goldAssetLabel(x))}</span><span class="badge">${esc(ownerName(x.ownerId))}</span></div>
+        <h3>${esc(x.name)}</h3><small class="muted">${weight} gram${S.goldTab==='jewelry'?` · ${purity}K`:''}</small>
+        <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px"><div class="split"><span class="muted small">Harga Buyback</span><b>${price?money(price)+'/gr':'Belum dinilai'}</b></div><div class="split"><span class="muted small">Nilai Aset</span><b>${money(value)}</b></div></div>
+        <div style="margin-top:10px">${goldStatusHtml(x)}</div>
+        ${S.goldTab==='digital'?`<div style="display:flex;gap:6px;margin-top:12px"><button class="btn primary" style="flex:1" data-buy-gold="${x.id}">Beli</button><button class="btn ghost" style="flex:1" data-sell-gold-digital="${x.id}">Jual</button></div>`:S.goldTab==='physical'?`<button class="btn dark" style="margin-top:10px;width:100%" data-sell-gold-physical="${x.id}">Jual Kepingan</button>`:`<button class="btn dark" style="margin-top:10px;width:100%" data-sell-gold-jewelry="${x.id}">Jual Perhiasan</button>`}
+      </div>`;
+    }).join('')||'<div class="empty" style="grid-column:1/-1">Belum ada aset pada kategori ini.</div>';
+    const meta=GoldMarket.meta();
+    const connection=meta?.lastFetchError?`🔴 Tidak dapat memeriksa harga terbaru. Cache terakhir tetap digunakan.<br><small>${esc(meta.lastFetchError)}</small>`:meta?.lastFetchSuccess?`Data harga diterima aplikasi: ${formatDateTime(meta.lastFetchSuccess)} WIB`:'Endpoint harga belum dihubungkan.';
+    return `<div class="section"><div><h2>Aset Emas</h2><span class="muted small">${connection}</span></div><div class="row-actions"><button class="btn ghost" data-action="simulateGoldPurchase">🧮 Simulasi Beli</button> <button class="btn ghost" data-action="syncGoldMarket">🔄 Sinkronkan Harga</button></div></div>
+      <div class="tabs"><button class="tab ${S.goldTab==='digital'?'active':''}" data-goldtab="digital">Digital</button><button class="tab ${S.goldTab==='physical'?'active':''}" data-goldtab="physical">Fisik (LM)</button><button class="tab ${S.goldTab==='jewelry'?'active':''}" data-goldtab="jewelry">Perhiasan</button></div>
+      <button class="btn primary" style="width:100%;margin-top:15px" data-action="addGold">${title}</button><div class="grid ${S.goldTab==='physical'?'three':'two'}" style="margin-top:15px">${cards}</div>`;
+}
+function simulateGoldPurchase(){
+  const all=GOLD_PROVIDER_CATALOG.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  modal('Simulasi Pembelian Emas',`<div class="formgrid"><div class="field"><label>Provider / Merek</label><select id="sim_provider" class="input" onchange="updateGoldPurchaseSimulation()">${all}</select></div>${f('Anggaran (Rp)','sim_budget','number','1000000')}</div><div id="sim_result" class="info" style="margin-top:12px"></div><div class="warning small" style="margin-top:10px">Simulasi memakai <b>Harga Beli</b> provider. Hasil belum memperhitungkan biaya, pajak, ongkir, minimum transaksi, atau pembulatan platform.</div>`,null,{cancelLabel:'Tutup'});
+  const input=$('#sim_budget'); if(input) input.addEventListener('input',updateGoldPurchaseSimulation); updateGoldPurchaseSimulation();
+}
+function updateGoldPurchaseSimulation(){
+  const provider=GoldMarket.provider(v('sim_provider')), budget=n(v('sim_budget')), box=$('#sim_result'); if(!box)return;
+  if(!provider||!provider.purchasePrice){box.innerHTML='<b>Harga beli belum tersedia.</b><br>Sinkronkan Gold Market setelah endpoint terhubung.';return;}
+  const grams=budget/provider.purchasePrice, stale=provider.status!=='success';
+  box.innerHTML=`<b>${esc(provider.name)}</b><br>Harga beli: <b>${money(provider.purchasePrice)}/gram</b><br>Estimasi diperoleh: <b>${grams.toLocaleString('id-ID',{maximumFractionDigits:6})} gram</b><br><small>${stale?'🟡 Menggunakan data valid terakhir dari ':'🟢 Harga diperbarui '}${formatDateTime(provider.lastSuccess)} WIB</small>`;
+}
+async function syncGoldMarket(){
+  try{toast('Memeriksa harga terbaru…');await GoldMarket.sync({manual:true});await refresh();toast('Harga emas berhasil diperbarui');}
+  catch(e){await refresh();toast('Gagal sync. Data terakhir tetap digunakan: '+e.message);}
 }
 
-// === PUSAT HARGA (PRICE HUB) ===
-function manageGoldPrices() {
-    const s = setting();
-    let bp = s.brandPrices || {};
-    let bs = s.brandSync || {};
-
-    let ownedBrands = {
-        digital: [...new Set(S.cache.goldAccounts.map(x=>x.brand))],
-        physical: [...new Set(S.cache.goldPhysical.filter(x=>x.status==='owned').map(x=>x.brand))],
-        jewelry: [...new Set(S.cache.goldJewelry.filter(x=>x.status==='owned').map(x=>x.brand))]
-    };
-
-    const renderRow = (brand, category) => {
-        const price = bp[brand] || 0;
-        const isApi = ['Pegadaian Digital', 'The Palace'].includes(brand);
-        const syncState = bs[brand] || { source:'default', time:null };
-        
-        let displayPrice = price > 0 ? money(price) : `<span class="muted" style="font-style:italic">Ikut Global (${money(s.globalGoldPrice)})</span>`;
-        let syncLabel = syncState.time ? `Sync: ${formatDateTime(syncState.time)} (${syncState.source})` : 'Belum disync';
-        let infoText = isApi ? '🟢 API Tersedia' : '🟡 API belum tersedia. Sync mengikuti Harga Global.';
-
-        return `<div style="display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:8px;">
-            <div style="flex:1; min-width:130px;">
-                <b style="font-size:14px;">${brand}</b>
-                <div class="small muted">${infoText}</div>
-                <div style="font-size:13px; margin-top:2px;">${displayPrice}</div>
-                <div style="font-size:10px; color:var(--muted); margin-top:2px;">${syncLabel}</div>
-            </div>
-            <div style="display:flex; gap:4px;">
-                <button class="btn ghost small" data-action="syncBrand" data-brand="${brand}" data-isapi="${isApi}">
-                    🔄 Sync
-                </button>
-                <button class="btn ghost small" data-action="editBrandPrice" data-brand="${brand}">
-                    ✏️ Edit
-                </button>
-            </div>
-        </div>`;
-    };
-
-    let html = `
-        <div class="card" style="background:var(--surface-2); margin-bottom:15px;">
-            <h3>🌟 Harga Acuan Global</h3>
-            <p class="small muted" style="margin-bottom:8px">Dipakai jika suatu merek belum diatur harganya.</p>
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-                <div>
-                    <b style="font-size:20px">${money(s.globalGoldPrice)} <small>/gr</small></b>
-                    <div style="font-size:10px; color:var(--muted); margin-top:2px;">Sync: ${formatDateTime(s.globalGoldSync.time)} (${s.globalGoldSync.source})</div>
-                </div>
-                <div style="display:flex; gap:4px;">
-                    <button class="btn primary small" data-action="syncGlobal">🔄 Sync Sheet</button>
-                    <button class="btn ghost small" data-action="editGlobalPrice">✏️ Edit</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    let hasData = false;
-    if (ownedBrands.digital.length) {
-        hasData = true;
-        html += `<h3 style="margin-bottom:8px;">Emas Digital</h3>` + ownedBrands.digital.map(b => renderRow(b, 'digital')).join('');
-    }
-    if (ownedBrands.physical.length) {
-        hasData = true;
-        html += `<h3 style="margin-top:16px; margin-bottom:8px;">Logam Mulia</h3>` + ownedBrands.physical.map(b => renderRow(b, 'physical')).join('');
-    }
-    if (ownedBrands.jewelry.length) {
-        hasData = true;
-        html += `<h3 style="margin-top:16px; margin-bottom:8px;">Perhiasan</h3>` + ownedBrands.jewelry.map(b => renderRow(b, 'jewelry')).join('');
-    }
-    
-    if (!hasData) {
-        html += `<div class="empty">Anda belum memiliki aset emas. Tambahkan emas terlebih dahulu untuk mengatur harganya.</div>`;
-    }
-
-    if ($('#modal').open && $('#modalTitle').textContent === 'Pusat Harga Emas') {
-        $('#modalBody').innerHTML = html;
-    } else {
-        modal('Pusat Harga Emas', html, null, {cancelLabel: 'Tutup', saveLabel: null});
-    }
-}
-
-async function editGlobalPrice() {
-    const s = setting();
-    modal('Ubah Harga Global', f('Harga per Gram (Rp)', 'x_gp', 'number', s.globalGoldPrice), async () => {
-        s.globalGoldPrice = n(v('x_gp'));
-        s.globalGoldSync = { source: 'manual', time: dateNow() };
-        await FWPDB.put('settings', s);
-        await refresh(); manageGoldPrices(); toast('Harga Global diperbarui');
-    });
-}
-
-async function editBrandPrice(brand) {
-    const s = setting();
-    const price = s.brandPrices[brand] || '';
-    modal(`Ubah Harga ${brand}`, `<div class="formgrid">${f('Harga per Gram (Rp)', 'x_bp', 'number', price)}</div><div class="info small" style="margin-top:10px">Kosongkan jika ingin mengikuti Harga Global.</div>`, async () => {
-        let newPrice = n(v('x_bp'));
-        if (newPrice > 0) s.brandPrices[brand] = newPrice;
-        else delete s.brandPrices[brand];
-        s.brandSync = s.brandSync || {};
-        s.brandSync[brand] = { source: 'manual', time: dateNow() };
-        await FWPDB.put('settings', s);
-        await refresh(); manageGoldPrices(); toast('Harga diperbarui');
-    });
-}
-
-// === FUNGSI GOOGLE SHEET ===
-async function fetchSheetPrices() {
-    const res = await fetch(SHEET_CSV_URL);
-    if (!res.ok) throw new Error('Gagal mengunduh data dari Google Sheet');
-    const text = await res.text();
-    
-    const lines = text.split('\n');
-    let prices = {};
-    
-    // Mulai dari baris 1 (baris 0 adalah header)
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        // Split CSV aman
-        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-        
-        // Pastikan ada minimal 4 kolom (A, B, C, D)
-        if (parts.length >= 4) {
-            const brand = parts[0].replace(/"/g, '').trim(); // Kolom A: Brand
-            
-            // Kolom D (Harga Buyback). Bersihkan titik/koma dan jadikan angka
-            const priceStr = parts[3].replace(/[^0-9]/g, ''); 
-            const price = parseInt(priceStr) || 0;
-            
-            // Hanya masukkan jika brand ada dan harga > 0
-            if (brand && price > 0) {
-                prices[brand] = price;
-            }
-        }
-    }
-    return prices;
-}
-
-async function syncGlobal() {
-    const btn = event.target.closest('button');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Sync...'; btn.disabled = true;
-
-    try {
-        const prices = await fetchSheetPrices();
-        
-        // Gunakan Antam sebagai acuan global, fallback ke UBS / default
-        const globalPrice = prices['Antam'] || prices['UBS'] || 1950000; 
-        
-        const s = setting();
-        s.globalGoldPrice = globalPrice;
-        s.globalGoldSync = { source: 'sheet', time: dateNow() };
-        await FWPDB.put('settings', s);
-        await refresh(); manageGoldPrices(); 
-        toast('Harga Global (Antam) ditarik: ' + money(globalPrice));
-    } catch (e) {
-        toast('Gagal Sync: ' + e.message);
-        btn.innerHTML = originalText; btn.disabled = false;
-    }
-}
-
-async function syncBrand(brand) {
-    const btn = event.target.closest('button');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Sync...'; btn.disabled = true;
-
-    try {
-        const prices = await fetchSheetPrices();
-        const s = setting();
-        s.brandSync = s.brandSync || {};
-
-        let newPrice = 0;
-        
-        // Smart Matching: cocokkan nama brand aplikasi dengan nama di Sheet
-        for (const [key, val] of Object.entries(prices)) {
-            if (brand.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(brand.toLowerCase())) {
-                newPrice = val; 
-                break;
-            }
-        }
-
-        if (newPrice > 0) {
-            s.brandPrices[brand] = newPrice;
-            s.brandSync[brand] = { source: 'sheet', time: dateNow() };
-            await FWPDB.put('settings', s);
-            await refresh(); manageGoldPrices(); 
-            toast(`Harga ${brand} ditarik: ` + money(newPrice));
-        } else {
-            // Fallback ke harga global jika merek tidak ditemukan di Sheet
-            s.brandPrices[brand] = s.globalGoldPrice;
-            s.brandSync[brand] = { source: 'global', time: dateNow() };
-            await FWPDB.put('settings', s);
-            await refresh(); manageGoldPrices(); 
-            toast(`Merek ${brand} tidak ada di Sheet, menggunakan Harga Global.`);
-        }
-    } catch (e) {
-        toast(`Gagal sync ${brand}: ` + e.message);
-        btn.innerHTML = originalText; btn.disabled = false;
-    }
-}
-
-// === FUNGSI UI LAINNYA ===
+// === FUNGSI UI LAINNYA ===// === FUNGSI UI LAINNYA ===
 function assetsView() {
     return `<div class="section"><div><h2>Aset Tetap</h2><span class="muted">Kendaraan, Properti, Elektronik.</span></div><button class="btn primary" data-action="addAsset">＋ Aset</button></div>
     <div class="grid three">${S.cache.assets.map(a=>`<div class="card"><div style="display:flex;justify-content:space-between"><span class="badge blue">${esc(a.category)}</span><span class="badge" style="font-size:10px">${esc(ownerName(a.ownerId) || 'Bersama')}</span></div><h3 style="margin:10px 0">${esc(a.name)}</h3><small class="muted">Beli: ${money(a.buyPrice)}</small><div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"><small class="muted">Nilai Saat Ini</small><b style="display:block;font-size:18px">${money(a.value)}</b></div><button class="btn red" style="margin-top:10px;width:100%" data-del-asset="${a.id}">Hapus</button></div>`).join('')||'<div class="card empty">Belum ada aset tetap.</div>'}</div>`
@@ -701,7 +441,7 @@ async function delOwner(oid) {
 
 async function seed(){
     let set=await FWPDB.get('settings','main');
-    if(!set) await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,globalGoldPrice:1950000, globalGoldSync: { source:'default', time:null }, brandPrices: {}, brandSync: {}});
+    if(!set) await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false});
     let owners=await FWPDB.all('owners');
     if(owners.length===0){ for(let o of [{id:'ow_self',name:'Milik Sendiri',type:'individual'},{id:'ow_wife',name:'Istri',type:'individual'},{id:'ow_husband',name:'Suami',type:'individual'},{id:'ow_joint',name:'Bersama',type:'joint'}]) await FWPDB.put('owners',o); }
     let insts = await FWPDB.all('institutions');
@@ -710,31 +450,32 @@ async function seed(){
 
 function ownerOpts(selected=''){return S.cache.owners.map(o=>`<option value="${o.id}" ${selected===o.id?'selected':''}>${esc(o.name)}</option>`).join('')}
 
+function providerOptions(list){return list.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+function toggleOtherProvider(){const other=$('#x_provider')?.value==='other';if($('#x_other_wrap'))$('#x_other_wrap').style.display=other?'block':'none';if($('#x_lm_mode_wrap'))$('#x_lm_mode_wrap').style.display=other?'block':'none';}
+function toggleLmMode(){const mode=v('x_price_mode');if($('#x_manual_price_wrap'))$('#x_manual_price_wrap').style.display=mode==='manual'?'block':'none';}
 async function addGold(){
-    if(!S.goldTab) S.goldTab = 'digital';
-    if(S.goldTab === 'digital') {
-        modal('Tambah Akun Emas Digital', `<div class="formgrid">${f('Nama Akun (Cth: Pegadaian Anggi)','x_name')}<div class="field"><label>Merek / Platform</label><input class="input" id="x_brand" placeholder="Cth: Pegadaian Digital"></div><div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div>${f('Saldo Awal (Gram)','x_weight','number','0')}${f('Total Modal Beli (Rp)','x_price','number','0')}</div>`, async()=>{
-            if(!v('x_name') || !v('x_brand')) return toast('Lengkapi nama dan merek');
-            let w = n(v('x_weight')), p = n(v('x_price')), avg = w > 0 ? (p/w) : 0;
-            await FWPDB.put('goldAccounts',{id:id('gacc'), name:v('x_name'), brand:v('x_brand'), ownerId:v('x_owner'), balanceGrams: w, avgCost: avg});
-            if(w > 0 && p > 0) await FWPDB.put('goldTransactions', {id:id('gtx'), accountId:id('gacc'), type:'buy', grams:w, pricePerGram:avg, totalPrice:p, date:dateNow()});
-            closeModal(); await refresh(); toast('Akun Emas Digital dibuat');
-        });
-    } else if(S.goldTab === 'physical') {
-        modal('Tambah Emas Fisik (LM)', `<div class="formgrid">${f('Nama (Cth: Antam 1g)','x_name')}<div class="field"><label>Merek</label><input class="input" id="x_brand" placeholder="Cth: Antam"></div>${f('Berat (Gram)','x_weight','number','1')}${f('Harga Beli (Rp)','x_price','number','0')}<div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div></div>`, async()=>{
-            if(!v('x_name') || !v('x_brand') || !n(v('x_weight'))) return toast('Lengkapi data');
-            await FWPDB.put('goldPhysical',{id:id('gphys'), name:v('x_name'), brand:v('x_brand'), ownerId:v('x_owner'), weight: n(v('x_weight')), buyPrice: n(v('x_price')), status:'owned', createdAt:dateNow()});
-            closeModal(); await refresh(); toast('Emas fisik ditambahkan');
-        });
-    } else {
-        modal('Tambah Perhiasan', `<div class="formgrid">${f('Nama Perhiasan (Cth: Cincin Emas)','x_name')}<div class="field"><label>Merek / Toko</label><input class="input" id="x_brand" placeholder="Cth: The Palace / Sinar Jaya"></div>${f('Berat (Gram)','x_weight','number','1')}${f('Kadar (Cth: 18)','x_purity','number','18')}${f('Harga Beli (Rp)','x_price','number','0')}<div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div></div>`, async()=>{
-            if(!v('x_name') || !v('x_brand') || !n(v('x_weight'))) return toast('Lengkapi data');
-            await FWPDB.put('goldJewelry',{id:id('gjew'), name:v('x_name'), brand:v('x_brand'), ownerId:v('x_owner'), weight: n(v('x_weight')), purity: n(v('x_purity')), buyPrice: n(v('x_price')), status:'owned', createdAt:dateNow()});
-            closeModal(); await refresh(); toast('Perhiasan ditambahkan');
-        });
-    }
+  if(!S.goldTab)S.goldTab='digital';
+  if(S.goldTab==='digital'){
+    modal('Tambah Akun Emas Digital',`<div class="formgrid">${f('Nama Akun','x_name')}<div class="field"><label>Platform</label><select id="x_provider" class="input" onchange="toggleOtherProvider()">${providerOptions(GOLD_DIGITAL_OPTIONS)}<option value="other">Lainnya</option></select></div><div class="field" id="x_other_wrap" style="display:none"><label>Nama Platform</label><input id="x_other_label" class="input" placeholder="Nama platform"></div><div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div>${f('Saldo Awal (Gram)','x_weight','number','0')}${f('Total Modal Beli (Rp)','x_price','number','0')}</div><div class="info small">Platform di luar daftar otomatis memakai harga acuan <b>Pegadaian</b> dan akan ditandai jelas sebagai harga acuan Pegadaian.</div>`,async()=>{
+      const chosen=v('x_provider'),manual=chosen==='other',label=manual?v('x_other_label'):(GoldMarket.catalog(chosen)?.name||'');
+      if(!v('x_name')||!label)return toast('Lengkapi nama akun dan platform'); const w=n(v('x_weight')),p=n(v('x_price')),accountId=id('gacc');
+      await FWPDB.put('goldAccounts',{id:accountId,name:v('x_name'),providerId:manual?null:chosen,providerLabel:label,priceProviderId:manual?'pegadaian':chosen,priceMode:manual?'pegadaian':'provider',priceDisclosure:manual?'Harga acuan Pegadaian':null,ownerId:v('x_owner'),balanceGrams:w,avgCost:w>0?p/w:0,createdAt:dateNow()});
+      if(w>0&&p>0)await FWPDB.put('goldTransactions',{id:id('gtx'),accountId,type:'buy',grams:w,pricePerGram:p/w,totalPrice:p,date:dateNow()});closeModal();await refresh();toast('Akun emas digital dibuat');
+    });
+  }else if(S.goldTab==='physical'){
+    modal('Tambah Emas Fisik (LM)',`<div class="formgrid">${f('Nama','x_name')}<div class="field"><label>Merek</label><select id="x_provider" class="input" onchange="toggleOtherProvider()">${providerOptions(GOLD_PHYSICAL_OPTIONS)}<option value="other">Lainnya</option></select></div><div class="field" id="x_other_wrap" style="display:none"><label>Nama Merek</label><input id="x_other_label" class="input" placeholder="Nama merek"></div><div class="field" id="x_lm_mode_wrap" style="display:none"><label>Metode Valuasi</label><select id="x_price_mode" class="input" onchange="toggleLmMode()"><option value="unvalued">Belum dinilai</option><option value="antam">Ikuti harga acuan Antam</option><option value="manual">Harga manual</option></select></div><div class="field" id="x_manual_price_wrap" style="display:none"><label>Harga buyback manual / gram</label><input id="x_manual_buyback" class="input" inputmode="numeric"></div>${f('Berat (Gram)','x_weight','number','1')}${f('Total Harga Beli (Rp)','x_price','number','0')}<div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div></div><div class="info small">Merek di luar daftar tidak dinilai sampai Anda memilih harga manual atau harga acuan <b>Antam</b>. Jika memakai acuan, aplikasi akan menginformasikan bahwa harga tersebut adalah harga Antam.</div>`,async()=>{
+      const chosen=v('x_provider'),manual=chosen==='other',label=manual?v('x_other_label'):(GoldMarket.catalog(chosen)?.name||''),mode=manual?v('x_price_mode'):'provider',w=n(v('x_weight'));
+      if(!v('x_name')||!label||!w)return toast('Lengkapi data');
+      await FWPDB.put('goldPhysical',{id:id('gphys'),name:v('x_name'),brandId:manual?null:chosen,brandLabel:label,priceProviderId:mode==='antam'?'antam':manual?null:chosen,priceMode:mode,priceDisclosure:mode==='antam'?'Harga acuan Antam':null,manualBuybackPrice:mode==='manual'?n(v('x_manual_buyback')):0,ownerId:v('x_owner'),weight:w,buyPrice:n(v('x_price')),status:'owned',createdAt:dateNow()});closeModal();await refresh();toast('Emas fisik ditambahkan');
+    });
+  }else{
+    const merchants=GOLD_JEWELRY_MERCHANTS.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
+    modal('Tambah Perhiasan',`<div class="formgrid">${f('Nama Perhiasan','x_name')}<div class="field"><label>Toko / Merek</label><select id="x_provider" class="input" onchange="toggleOtherProvider()">${merchants}<option value="other">Toko lainnya</option><option value="unbranded">Tidak bermerek</option></select></div><div class="field" id="x_other_wrap" style="display:none"><label>Nama Toko / Merek</label><input id="x_other_label" class="input"></div>${f('Berat (Gram)','x_weight','number','1')}${f('Kadar (Karat)','x_purity','number','18')}${f('Total Harga Beli (Rp)','x_price','number','0')}<div class="field"><label>Metode Valuasi</label><select id="x_price_mode" class="input" onchange="toggleLmMode()"><option value="unvalued">Belum dinilai</option><option value="antam">Estimasi harga Antam × kadar</option><option value="manual">Harga buyback toko / gram</option></select></div><div class="field" id="x_manual_price_wrap" style="display:none"><label>Harga buyback toko / gram sesuai kadar</label><input id="x_manual_buyback" class="input" inputmode="numeric"></div><div class="field"><label>Pemilik</label><select id="x_owner" class="input">${ownerOpts()}</select></div></div><div class="warning small">Estimasi Antam hanyalah acuan berdasarkan kadar, bukan harga buyback resmi toko.</div>`,async()=>{
+      const chosen=v('x_provider'),label=chosen==='other'?v('x_other_label'):chosen==='unbranded'?'Tidak bermerek':(GOLD_JEWELRY_MERCHANTS.find(x=>x.id===chosen)?.name||''),mode=v('x_price_mode'),w=n(v('x_weight'));
+      if(!v('x_name')||!label||!w)return toast('Lengkapi data');await FWPDB.put('goldJewelry',{id:id('gjew'),name:v('x_name'),merchantId:['other','unbranded'].includes(chosen)?null:chosen,merchantLabel:label,priceProviderId:mode==='antam'?'antam':null,priceMode:mode,priceDisclosure:mode==='antam'?'Estimasi berdasarkan harga Antam dan kadar':mode==='manual'?'Harga buyback toko manual':null,manualBuybackPrice:mode==='manual'?n(v('x_manual_buyback')):0,ownerId:v('x_owner'),weight:w,purity:n(v('x_purity')),buyPrice:n(v('x_price')),status:'owned',createdAt:dateNow()});closeModal();await refresh();toast('Perhiasan ditambahkan');
+    }); setTimeout(toggleLmMode,0);
+  }
 }
-
 async function buyGold(accId) {
     let acc = S.cache.goldAccounts.find(x=>x.id===accId);
     modal('Beli Emas Digital', `<div class="formgrid">${f('Jumlah (Gram)','x_weight','number','1')}${f('Total Harga Beli (Rp)','x_price','number','0')}</div>`, async()=>{
@@ -752,8 +493,8 @@ async function buyGold(accId) {
 async function sellGoldDigital(accId) {
     let acc = S.cache.goldAccounts.find(x=>x.id===accId);
     if(n(acc.balanceGrams) <= 0) return toast('Saldo emas kosong');
-    let allocGram = getSourceAllocated(accId) / getGoldPrice(acc.brand);
-    modal('Jual Emas Digital', `<div class="formgrid">${f('Jumlah Jual (Gram)','x_weight','number','1')}<div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${sourceOpts()}</select></div>${f('Harga Jual / Gram (Rp)','x_price','number', String(Math.round(getGoldPrice(acc.brand))))}</div><div class="info small">Saldo saat ini: ${n(acc.balanceGrams)} gr. (Teralokasi: ${allocGram.toFixed(2)} gr).</div>`, async()=>{
+    let allocGram = getSourceAllocated(accId) / getGoldPrice(acc);
+    modal('Jual Emas Digital', `<div class="formgrid">${f('Jumlah Jual (Gram)','x_weight','number','1')}<div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${sourceOpts()}</select></div>${f('Harga Jual / Gram (Rp)','x_price','number', String(Math.round(getGoldPrice(acc))))}</div><div class="info small">Saldo saat ini: ${n(acc.balanceGrams)} gr. (Teralokasi: ${allocGram.toFixed(2)} gr).</div>`, async()=>{
         let w = n(v('x_weight')), sid = v('x_account'), p = n(v('x_price'));
         if(!w || !sid || !p) return toast('Lengkapi data');
         if(w > n(acc.balanceGrams)) return toast('Melebihi saldo emas');
@@ -767,7 +508,7 @@ async function sellGoldDigital(accId) {
 
 async function sellGoldPhysical(gid) {
     let g = S.cache.goldPhysical.find(x=>x.id===gid);
-    modal('Jual Emas Fisik', `<div class="formgrid">${f('Total Harga Jual (Rp)','x_price','number', String(Math.round(n(g.weight) * getGoldPrice(g.brand))))}<div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${sourceOpts()}</select></div></div><div class="info small">Anda menjual ${esc(g.name)} (${n(g.weight)} gr) secara utuh.</div>`, async()=>{
+    modal('Jual Emas Fisik', `<div class="formgrid">${f('Total Harga Jual (Rp)','x_price','number', String(Math.round(n(g.weight) * getGoldPrice(g))))}<div class="field"><label>Masuk ke Rekening</label><select id="x_account" class="input">${sourceOpts()}</select></div></div><div class="info small">Anda menjual ${esc(g.name)} (${n(g.weight)} gr) secara utuh.</div>`, async()=>{
         let p = n(v('x_price')), sid = v('x_account');
         if(!p || !sid) return toast('Lengkapi data');
         g.status = 'sold'; g.soldPrice = p; g.soldAt = dateNow(); await FWPDB.put('goldPhysical', g);
@@ -798,11 +539,11 @@ async function addGoal(){
 async function allocateGoal(gid){
     let accs = S.cache.accounts.map(a=>({id:a.id, type:'bank', name:a.name, avail:a.balance}));
     let pocks = S.cache.pockets.map(p=>({id:p.id, type:'pocket', name:p.name, avail:p.balance}));
-    let goldAcc = S.cache.goldAccounts.map(g=>({id:g.id, type:'gold_digital', name:g.name, avail:g.balanceGrams * getGoldPrice(g.brand), unit:'gram'}));
-    let goldPhys = S.cache.goldPhysical.filter(g=>g.status==='owned').map(g=>({id:g.id, type:'gold_physical', name:g.name, avail:g.weight * getGoldPrice(g.brand), unit:'keping'}));
+    let goldAcc = S.cache.goldAccounts.map(g=>({id:g.id, type:'gold_digital', name:g.name, avail:g.balanceGrams * getGoldPrice(g), unit:'gram'}));
+    let goldPhys = S.cache.goldPhysical.filter(g=>g.status==='owned').map(g=>({id:g.id, type:'gold_physical', name:g.name, avail:g.weight * getGoldPrice(g), unit:'keping'}));
 
     let opts = [...accs, ...pocks].map(x=>`<option value="${x.id}" data-type="${x.type}" data-unit="rp">${esc(x.name)} (Rp ${formatNum(x.avail)})</option>`).join('');
-    opts += goldAcc.map(x=>`<option value="${x.id}" data-type="gold_digital" data-unit="gram">${esc(x.name)} (${x.avail/getGoldPrice(S.cache.goldAccounts.find(a=>a.id===x.id).brand)} gr)</option>`).join('');
+    opts += goldAcc.map(x=>`<option value="${x.id}" data-type="gold_digital" data-unit="gram">${esc(x.name)} (${x.avail/getGoldPrice(S.cache.goldAccounts.find(a=>a.id===x.id))} gr)</option>`).join('');
     opts += goldPhys.map(x=>`<option value="${x.id}" data-type="gold_physical" data-unit="keping">${esc(x.name)} (1 Keping)</option>`).join('');
 
     modal('Alokasikan Aset', `<div class="formgrid"><div class="field full"><label>Sumber Kekayaan</label><select id="x_source" class="input">${opts}</select></div>${f('Nominal Alokasi (Rp atau Gram)','x_amount','number')}</div><div class="info small">Masukkan angka nominal Rp jika memilih Bank/Pocket. Masukkan angka gram jika memilih Emas Digital.</div>`, async()=>{
@@ -811,10 +552,10 @@ async function allocateGoal(gid){
         let totalAllocated = getSourceAllocated(sid), maxAvail = 0;
         if(type === 'bank') maxAvail = acct(sid).balance;
         else if(type === 'pocket') maxAvail = pocket(sid).balance;
-        else if(type === 'gold_digital') { let b = S.cache.goldAccounts.find(x=>x.id===sid).brand; maxAvail = S.cache.goldAccounts.find(x=>x.id===sid).balanceGrams * getGoldPrice(b); }
-        else if(type === 'gold_physical') { let b = S.cache.goldPhysical.find(x=>x.id===sid).brand; maxAvail = S.cache.goldPhysical.find(x=>x.id===sid).weight * getGoldPrice(b); }
+        else if(type === 'gold_digital') { let ga=S.cache.goldAccounts.find(x=>x.id===sid); maxAvail=ga.balanceGrams*getGoldPrice(ga); }
+        else if(type === 'gold_physical') { let gp=S.cache.goldPhysical.find(x=>x.id===sid); maxAvail=gp.weight*getGoldPrice(gp); }
         let currentAllocInRp = (type.includes('gold')) ? totalAllocated : totalAllocated;
-        let newAllocInRp = (unit === 'gram') ? (amount * setting().globalGoldPrice) : amount;
+        let newAllocInRp=(unit==='gram')?(amount*getGoldPrice(S.cache.goldAccounts.find(x=>x.id===sid))):amount;
         if (currentAllocInRp + newAllocInRp > maxAvail) return toast('Alokasi melebihi ketersediaan saldo aset.');
         await FWPDB.put('goalAllocations', {id: id('ga'), goalId: gid, sourceId: sid, type: type, amount: amount, status: 'active', createdAt: dateNow()});
         closeModal(); await refresh(); toast('Alokasi berhasil');
@@ -890,7 +631,7 @@ const actions={
     closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
     transfer, closing, copyPlan, preferences, backup,
     addGold, addAsset, addDebt,
-    manageGoldPrices, editGlobalPrice, editBrandPrice, syncBrand, syncGlobal,
+    syncGoldMarket, simulateGoldPurchase,
     restore:()=>$('#restoreFile').click(),
     prevMonth:()=>shift(-1), nextMonth:()=>shift(1),
     theme: async()=>{ const s=setting(); s.theme=s.theme==='dark'?'light':'dark'; await FWPDB.put('settings',s); await refresh(); },
@@ -900,7 +641,7 @@ const actions={
         s={...s, onboarded:true, ownerName:v('onName')||'Kamu', budgetMode:ON.budgetMode, defaultClosing:ON.defaultClosing, surplusBehavior:v('onSurplus'), strictBalance:$('#onStrict').checked};
         await FWPDB.put('settings',s); $('#onboarding').classList.add('hidden'); await refresh();
     },
-    manageOwners: manageOwners, addOwner: addOwner
+    manageOwners: manageOwners, addOwner: addOwner, toggleOtherProvider, toggleLmMode
 };
 
 document.addEventListener('click',async e=>{
@@ -908,9 +649,7 @@ document.addEventListener('click',async e=>{
     if(t.dataset.page){S.page=t.dataset.page;render();return}
     
     if(t.dataset.action){
-        if($('#modal').open && t.dataset.action !== 'closeModal' && !['theme','privacy','manageGoldPrices','editBrandPrice','syncBrand','editGlobalPrice','syncGlobal','manageOwners','addOwner'].includes(t.dataset.action)) closeModal();
-        if (t.dataset.action === 'editBrandPrice') { await actions.editBrandPrice(t.dataset.brand); return; }
-        if (t.dataset.action === 'syncBrand') { await actions.syncBrand(t.dataset.brand); return; }
+        if($('#modal').open && t.dataset.action !== 'closeModal' && !['theme','privacy','syncGoldMarket','manageOwners','addOwner'].includes(t.dataset.action)) closeModal();
         await actions[t.dataset.action]?.();return
     }
     
@@ -996,4 +735,4 @@ function showOnboarding(step){
 }
 let ON={budgetMode:'simple',defaultClosing:'used'};
 
-(async()=>{await FWPDB.open();await seed();await refresh();if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{})})();
+(async()=>{await FWPDB.open();await seed();await refresh();GoldMarket.autoSync().then(async r=>{if(r&&!r.skipped){await refresh();}}).catch(()=>{});if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{})})();
