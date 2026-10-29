@@ -1,6 +1,6 @@
 // Gold Market Service — cache-first, Apps Script Web App JSON, auto-sync 90 menit.
 // Isi URL ini setelah Apps Script dipublikasikan sebagai Web App.
-const GOLD_MARKET_API_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const GOLD_MARKET_API_URL = 'https://script.google.com/macros/s/AKfycbx3-qVt2k91IdAVjH_8bmTl0-2rhAKkp7Mi2M-p7YLIjtmGq858nRqnsbe727yvHjHXkw/exec';
 const GOLD_MARKET_CACHE_MS = 90 * 60 * 1000;
 const GOLD_MARKET_TIMEOUT_MS = 15000;
 
