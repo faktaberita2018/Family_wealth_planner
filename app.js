@@ -1,4 +1,4 @@
-const S={page:'home',wealth:'goals',month:new Date().toISOString().slice(0,7),privacy:false,theme:'light',cache:{}};
+const S={page:'home',wealth:'accounts',month:new Date().toISOString().slice(0,7),privacy:false,theme:'light',cache:{}};
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const id=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
@@ -211,7 +211,7 @@ function goalValue(gid){
     },0);
 }
 
-function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,more:more}[S.page];$('#view').innerHTML=fn()}
+function render(){renderNav();let fn={home:home,plan:planView,wealth:wealth,goals:goalsView,more:more}[S.page];$('#view').innerHTML=fn()}
 function renderNav(){$$('#nav [data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===S.page))}
 
 function home(){
@@ -383,17 +383,15 @@ function planView(){
     `}`
 }
 
-
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
     <div class="tabs wealth-tabs">
-        <button class="tab ${S.wealth==='goals'?'active':''}" data-wealth="goals">Tujuan</button>
         <button class="tab ${S.wealth==='accounts'?'active':''}" data-wealth="accounts">Rekening</button>
         <button class="tab ${S.wealth==='gold'?'active':''}" data-wealth="gold">Emas</button>
         <button class="tab ${S.wealth==='assets'?'active':''}" data-wealth="assets">Aset Tetap</button>
         <button class="tab ${S.wealth==='debts'?'active':''}" data-wealth="debts">Utang/Piutang</button>
     </div>
-    ${S.wealth==='goals'?goalsView():S.wealth==='accounts'?accountsView():S.wealth==='gold'?goldView():S.wealth==='assets'?assetsView():debtsView()}`
+    ${S.wealth==='accounts'?accountsView():S.wealth==='gold'?goldView():S.wealth==='assets'?assetsView():debtsView()}`
 }
 
 function goalsView(){
@@ -806,15 +804,13 @@ async function copyPlan(){ if(plan())return toast('Bulan ini sudah mempunyai ren
 
 async function preferences(){ let s=setting(); modal('Preferensi',`<div class="formgrid"><div class="field"><label>Mode budgeting</label><select id="x_budget" class="input"><option value="simple">Ringkas</option><option value="closing">Closing ringan</option><option value="detailed">Lebih rinci</option></select></div><div class="field"><label>Default closing</label><select id="x_closing" class="input"><option value="used">Anggap terpakai</option><option value="ask">Selalu tanyakan</option><option value="remain">Anggap tersisa</option></select></div><div class="field full"><label><input id="x_strict" type="checkbox" ${s.strictBalance?'checked':''}> Mode saldo ketat</label></div></div>`,async()=>{ s.budgetMode=v('x_budget');s.defaultClosing=v('x_closing');s.strictBalance=$('#x_strict').checked; await FWPDB.put('settings',s);closeModal();await refresh() }); $('#x_budget').value=s.budgetMode;$('#x_closing').value=s.defaultClosing }
 
-function quickAdd(){ modal('Tambah Cepat',`<div class="grid two"><button type="button" class="btn primary" data-action="newPlan">Rencana</button><button type="button" class="btn ghost" data-action="transfer">Transfer</button><button type="button" class="btn ghost" data-action="addGoal">Tujuan</button><button type="button" class="btn ghost" data-action="addGold">Emas</button><button type="button" class="btn ghost" data-action="addDebt">Utang/Piutang</button></div>`,null) }
-
 async function backup(){let x=await FWPDB.dump();download('fwp-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(x,null,2),'application/json')}
 function download(name,text,type){let u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
 
 function shift(d){let x=new Date(S.month+'-01');x.setMonth(x.getMonth()+d);S.month=x.toISOString().slice(0,7);render()}
 
 const actions={
-    closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
+    closeModal, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
     transfer, closing, copyPlan, preferences, backup,
     addGold, addAsset, addDebt, editPlan, deletePlan, manageCategories,
     syncGoldMarket, simulateGoldPurchase,
