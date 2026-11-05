@@ -1,33 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Latar belakang kotak melengkung hijau lime -->
-  <rect width="100" height="100" rx="24" fill="#b6eb2b" />
-  
-  <!-- Batang Pohon (Trunk) -->
-  <path d="M43 90 C43 78 46 74 50 74 C54 74 57 78 57 90 Z" fill="#15201a" />
-  <rect x="38" y="88" width="24" height="4" rx="2" fill="#15201a" />
-  
-  <!-- Kanopi Pohon (Tumpukan Koin) -->
-  <g stroke="#b6eb2b" stroke-width="2">
-    <!-- Baris Bawah (3 Koin) -->
-    <circle cx="22" cy="62" r="14" fill="#15201a" />
-    <circle cx="50" cy="62" r="14" fill="#15201a" />
-    <circle cx="78" cy="62" r="14" fill="#15201a" />
-    
-    <!-- Baris Tengah (2 Koin) -->
-    <circle cx="36" cy="44" r="14" fill="#15201a" />
-    <circle cx="64" cy="44" r="14" fill="#15201a" />
-    
-    <!-- Baris Atas (1 Koin) -->
-    <circle cx="50" cy="26" r="14" fill="#15201a" />
-  </g>
-  
-  <!-- Titik Tengah Koin (Lubang Koin) -->
-  <circle cx="22" cy="62" r="3" fill="#b6eb2b" />
-  <circle cx="50" cy="62" r="3" fill="#b6eb2b" />
-  <circle cx="78" cy="62" r="3" fill="#b6eb2b" />
-  <circle cx="36" cy="44" r="3" fill="#b6eb2b" />
-  <circle cx="64" cy="44" r="3" fill="#b6eb2b" />
-  
-  <!-- Titik atas dibuat lebih besar sedikit sebagai aksen (pucuk pohon) -->
-  <circle cx="50" cy="26" r="4" fill="#b6eb2b" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
+<title id="title">Family Wealth Planner</title><desc id="desc">Pohon dari susunan koin pada latar deep teal</desc>
+<rect width="100" height="100" rx="24" fill="#176B68"/>
+<path d="M43 90c0-12 3-16 7-16s7 4 7 16Z" fill="#F4F7F5"/><rect x="38" y="88" width="24" height="4" rx="2" fill="#F4F7F5"/>
+<g fill="#F4F7F5" stroke="#176B68" stroke-width="2"><circle cx="22" cy="62" r="14"/><circle cx="50" cy="62" r="14"/><circle cx="78" cy="62" r="14"/><circle cx="36" cy="44" r="14"/><circle cx="64" cy="44" r="14"/><circle cx="50" cy="26" r="14"/></g>
+<g fill="#C79335"><circle cx="22" cy="62" r="3"/><circle cx="50" cy="62" r="3"/><circle cx="78" cy="62" r="3"/><circle cx="36" cy="44" r="3"/><circle cx="64" cy="44" r="3"/><circle cx="50" cy="26" r="4"/></g>
 </svg>
