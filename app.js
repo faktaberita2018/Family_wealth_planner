@@ -272,20 +272,32 @@ function planView(){
             </summary>
             <div style="padding: 0 16px;">
                 ${catItems.map(x=>`
-                    <div class="split" style="padding:12px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:nowrap;">
-                        <div style="flex:1; min-width:0;">
-                            <b style="font-size:14px; display:block; word-break:break-word;">${esc(x.name)}</b>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); gap:10px;">
+                        
+                        <!-- Kiri: Nama & Keterangan -->
+                        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                            <b style="font-size:14px; display:block; word-break:break-word; line-height:1.3;">${esc(x.name)}</b>
                             <small class="muted">${x.fundingMode==='transfer'?'Transfer':'Penanda'}</small>
                         </div>
-                        <div style="text-align:right; display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                            <b style="font-size:14px; white-space:nowrap; margin-right:4px;">${money(x.amount)}</b>
+                        
+                        <!-- Tengah: Nominal & Dropdown -->
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;">
+                            <b style="font-size:14px; white-space:nowrap;">${money(x.amount)}</b>
                             <select class="input" style="width:auto; min-height:28px; padding:4px 6px; font-size:11px; border-radius:var(--r-xs); background:transparent; border:1px solid var(--border); cursor:pointer;" onchange="changeItemStatus('${x.id}', this.value, this)">
                                 <option value="planned" ${x.fundingStatus==='planned'?'selected':''}>Rencana</option>
                                 <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
                                 <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
                             </select>
-                            ${!isClosed?`<button class="icon" style="width:26px; height:26px; font-size:12px; margin-left:2px;" data-edit-item="${x.id}">✎</button><button class="icon" style="width:26px; height:26px; font-size:16px; color:var(--red);" data-remove-item="${x.id}">×</button>`:''}
                         </div>
+
+                        <!-- Kanan: Tombol Edit & Hapus (Atas Bawah) -->
+                        <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+                            ${!isClosed?`
+                                <button class="icon" style="width:28px; height:28px; font-size:12px;" data-edit-item="${x.id}">✎</button>
+                                <button class="icon" style="width:28px; height:28px; font-size:16px; color:var(--red);" data-remove-item="${x.id}">×</button>
+                            `:''}
+                        </div>
+
                     </div>
                 `).join('')}
             </div>
@@ -315,7 +327,7 @@ function planView(){
             </p>
         </div>
 
-        <!-- Navigasi Bulan (Pindah ke bawah Hero) -->
+        <!-- Navigasi Bulan -->
         <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-top:15px;">
             <button class="icon" data-action="prevMonth">‹</button>
             <b style="text-align:center; flex:1; padding:0 10px;">${esc(p.name)}</b>
