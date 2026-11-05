@@ -64,7 +64,19 @@ const GoldMarket={
     try{
       const body=await this.fetchJson();
       let count=0;
-      for(const raw of body.providers){ const row=this.normalizeProvider(raw); if(row){await FWPDB.put('goldPriceProviders',row);count++;} }
+      for(const raw of body.providers){
+        const row=this.normalizeProvider(raw);
+        if(!row) continue;
+        const previous=await FWPDB.get('goldPriceProviders',row.id);
+        if(row.status!=='success'&&previous){
+          row.purchasePrice=Number(previous.purchasePrice)||0;
+          row.buybackPrice=Number(previous.buybackPrice)||0;
+          row.lastSuccess=row.lastSuccess||previous.lastSuccess||null;
+          row.sourceUrl=row.sourceUrl||previous.sourceUrl||'';
+        }
+        await FWPDB.put('goldPriceProviders',row);
+        count++;
+      }
       if(!count) throw new Error('Tidak ada provider valid pada respons');
       await FWPDB.put('goldPriceMeta',{id:'market-sync',lastFetchAttempt:attempt,lastFetchSuccess:new Date().toISOString(),
         lastFetchError:'',apiVersion:body.apiVersion||'1'});

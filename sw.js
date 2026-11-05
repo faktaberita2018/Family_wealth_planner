@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fwp-1.3-gold-market-v1';
+const CACHE_NAME = 'fwp-1.3-gold-market-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const APP_SHELL = [
   './db.js',
   './gold-market.js',
   './app.js',
+  './gold-market-ui.js',
   './manifest.webmanifest',
   './icon.svg'
 ];
