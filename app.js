@@ -388,7 +388,7 @@ function wealth(){
     <div class="tabs wealth-line-tabs">
         <button class="tab ${S.wealth==='accounts'?'active':''}" data-wealth="accounts">Rekening</button>
         <button class="tab ${S.wealth==='gold'?'active':''}" data-wealth="gold">Emas</button>
-        <button class="tab ${S.wealth==='assets'?'active':''}" data-wealth="assets">Aset Tetap</button>
+        <button class="tab ${S.wealth==='assets'?'active':''}" data-wealth="assets">Aset</button>
         <button class="tab ${S.wealth==='debts'?'active':''}" data-wealth="debts">Utang/Piutang</button>
     </div>
     ${S.wealth==='accounts'?accountsView():S.wealth==='gold'?goldView():S.wealth==='assets'?assetsView():debtsView()}`
