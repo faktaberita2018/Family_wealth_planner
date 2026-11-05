@@ -311,3 +311,92 @@ html[data-theme=dark] .hero,html[data-theme=dark] .hero[style]{background:linear
 .gold-category-tabs{display:grid!important;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);padding:0;overflow:visible}.gold-category-tabs .tab{position:relative;border:0;border-radius:0;background:transparent;color:var(--muted);padding:11px 6px 12px;text-align:center}.gold-category-tabs .tab.active{background:transparent;color:var(--identity)}.gold-category-tabs .tab.active:after{content:"";position:absolute;left:18%;right:18%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--identity)}
 .gm-filter-tabs{gap:6px}.gm-filter-tabs .tab{padding:7px 11px;background:var(--surface);border-color:var(--border)}.gm-filter-tabs .tab.active{background:var(--identity-soft);border-color:var(--identity);color:var(--identity)}.gm-hi strong{color:var(--identity)}
 @media(max-width:520px){main{padding-top:0!important}#view>.section:first-child{margin-top:6px!important}.row-actions .btn{padding:8px 10px;min-height:36px;font-size:13px}}
+
+
+/* === REVISI GOLD MARKET UI === */
+
+/* 1. Gaya Tab Underline (seperti gambar 1) */
+.gm-underline-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 0;
+}
+.gm-underline-tabs .tab {
+    position: relative;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 10px 16px 12px;
+    font-weight: 700;
+    font-size: 14px;
+    flex: 1;
+    text-align: center;
+}
+.gm-underline-tabs .tab.active {
+    background: transparent;
+    color: var(--identity);
+}
+.gm-underline-tabs .tab.active::after {
+    content: "";
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--identity);
+}
+
+/* 2. Grid 2x2 untuk 4 Card Highlight */
+.gm-highlights {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Paksa 2 kolom kiri kanan */
+    gap: 10px;
+    margin: 14px 0;
+}
+.gm-hi {
+    min-height: auto; /* Hapus min-height 120px */
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.gm-hi small { font-size: 11px; line-height: 1.2; }
+.gm-hi b { font-size: 14px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-hi strong { font-size: 15px; color: var(--identity); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 3. Header Gold Market */
+.gm-market-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+.gm-sync-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 36px;
+    flex-shrink: 0;
+}
+
+/* Penyesuaian layar HP */
+@media(max-width: 520px) {
+    .gm-highlights { gap: 8px; }
+    .gm-hi { padding: 10px; }
+    .gm-hi strong { font-size: 14px; }
+    .gm-sync-btn { padding: 6px 10px; font-size: 12px; min-height: 32px; }
+    .gm-controls { padding: 12px; }
+}
+
+/* Fix Card Kontrol agar tidak terlalu jauh jaraknya */
+.gm-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    margin-bottom: 15px;
+}
+.gm-controls select { max-width: 100%; }
