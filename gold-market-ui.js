@@ -22,7 +22,38 @@
     const hi=(label,p,val)=>`<div class="card gm-hi"><small class="muted">${label}</small><b>${p?esc(p.name):'Belum tersedia'}</b><strong>${p?val:'—'}</strong></div>`;
     const cards=rows().map(p=>{const s=spread(p),st=status(p);return `<article class="card gm-card"><div class="gm-head"><div><b>${esc(p.name)}</b><small class="muted">${p.category==='digital'?'Digital':'Fisik / LM'}</small></div><span class="badge ${st[1]}">${st[0]}</span></div><div class="gm-prices"><div><small>Harga Beli</small><b>${n(p.purchasePrice)?money(p.purchasePrice)+'/gr':'—'}</b></div><div><small>Buyback</small><b>${n(p.buybackPrice)?money(p.buybackPrice)+'/gr':'—'}</b></div></div><div class="split"><small class="muted">Spread</small><b>${s.percent===null?'—':money(s.amount)+' · '+s.percent.toFixed(2)+'%'}</b></div><small class="muted">Diperbarui: ${p.lastSuccess?formatDateTime(p.lastSuccess)+' WIB':'Belum tersedia'}</small><button class="btn ghost gm-full" data-gm-detail="${p.id}">Lihat Detail</button></article>`}).join('');
     const meta=GoldMarket.meta();
-    return `<div class="section"><div><h2>Gold Market Center</h2><span class="muted small">${meta?.lastFetchError?'Pembaruan gagal. Data valid sebelumnya tetap digunakan.':meta?.lastFetchSuccess?'Data diterima '+formatDateTime(meta.lastFetchSuccess)+' WIB':'Harga belum pernah disinkronkan.'}</span></div><button class="btn primary" data-action="syncGoldMarket">🔄 Perbarui Harga</button></div>${meta?.lastFetchError?`<div class="warning small">${esc(meta.lastFetchError)}<br>Harga valid terakhir tidak dihapus.</div>`:''}<div class="grid four gm-highlights">${hi('Harga Beli Terendah',buys[0],buys[0]?money(buys[0].purchasePrice)+'/gr':'')}${hi('Buyback Tertinggi',backs[0],backs[0]?money(backs[0].buybackPrice)+'/gr':'')}${hi('Spread Terendah',spreads[0],spreads[0]?spread(spreads[0]).percent.toFixed(2)+'%':'')}<div class="card gm-hi"><small class="muted">Ketersediaan</small><b>${all.filter(p=>status(p)[0]!=='Unavailable').length} dari ${all.length} provider</b><strong>${fresh} Fresh</strong></div></div><div class="card gm-controls"><div class="tabs gm-filter-tabs"><button class="tab ${state.filter==='all'?'active':''}" data-gm-filter="all">Semua</button><button class="tab ${state.filter==='digital'?'active':''}" data-gm-filter="digital">Digital</button><button class="tab ${state.filter==='physical'?'active':''}" data-gm-filter="physical">Fisik / LM</button></div><select class="input" data-gm-sort><option value="purchase">Harga beli terendah</option><option value="buyback">Buyback tertinggi</option><option value="spread">Spread terendah</option><option value="latest">Pembaruan terbaru</option><option value="name">Nama provider</option></select></div><div class="grid three">${cards}</div>`;
+    
+    return `<div class="section gm-market-header">
+        <div style="min-width:0">
+            <h2>Gold Market Center</h2>
+            <span class="muted small">${meta?.lastFetchError?'Pembaruan gagal. Data valid sebelumnya tetap digunakan.':meta?.lastFetchSuccess?'Data diterima '+formatDateTime(meta.lastFetchSuccess)+' WIB':'Harga belum pernah disinkronkan.'}</span>
+        </div>
+        <button class="btn primary gm-sync-btn" data-action="syncGoldMarket">🔄 Perbarui</button>
+    </div>
+    ${meta?.lastFetchError?`<div class="warning small">${esc(meta.lastFetchError)}<br>Harga valid terakhir tidak dihapus.</div>`:''}
+    
+    <div class="gm-highlights">
+        ${hi('Harga Beli Terendah',buys[0],buys[0]?money(buys[0].purchasePrice)+'/gr':'')}
+        ${hi('Buyback Tertinggi',backs[0],backs[0]?money(backs[0].buybackPrice)+'/gr':'')}
+        ${hi('Spread Terendah',spreads[0],spreads[0]?spread(spreads[0]).percent.toFixed(2)+'%':'')}
+        <div class="card gm-hi"><small class="muted">Ketersediaan</small><b>${all.filter(p=>status(p)[0]!=='Unavailable').length} dari ${all.length} provider</b><strong>${fresh} Fresh</strong></div>
+    </div>
+    
+    <div class="card gm-controls">
+        <div class="tabs gm-underline-tabs">
+            <button class="tab ${state.filter==='all'?'active':''}" data-gm-filter="all">Semua</button>
+            <button class="tab ${state.filter==='digital'?'active':''}" data-gm-filter="digital">Digital</button>
+            <button class="tab ${state.filter==='physical'?'active':''}" data-gm-filter="physical">Fisik / LM</button>
+        </div>
+        <select class="input" data-gm-sort>
+            <option value="purchase" ${state.sort==='purchase'?'selected':''}>Harga beli terendah</option>
+            <option value="buyback" ${state.sort==='buyback'?'selected':''}>Buyback tertinggi</option>
+            <option value="spread" ${state.sort==='spread'?'selected':''}>Spread terendah</option>
+            <option value="latest" ${state.sort==='latest'?'selected':''}>Pembaruan terbaru</option>
+            <option value="name" ${state.sort==='name'?'selected':''}>Nama provider</option>
+        </select>
+    </div>
+    <div class="grid three">${cards}</div>`;
   }
   goldView = function(){
     const tabs=`<div class="gm-area" role="tablist"><button class="tab ${state.area==='assets'?'active':''}" data-gm-area="assets">Aset Saya</button><button class="tab ${state.area==='market'?'active':''}" data-gm-area="market">Gold Market</button></div>`;
