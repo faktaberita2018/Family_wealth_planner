@@ -469,3 +469,45 @@ details.card[open] summary {
 
 /* Opsional: hapus display tombol plus jika masih tersisa */
 #nav .add { display: none !important; }
+
+/* === GAYA TAB UNDERLINE UNTUK MENU KEKAYAAN === */
+.wealth-line-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 0;
+    margin-bottom: 15px;
+    scrollbar-width: none; /* Sembunyikan scrollbar di Firefox */
+    -ms-overflow-style: none; /* Sembunyikan scrollbar di IE/Edge */
+}
+.wealth-line-tabs::-webkit-scrollbar {
+    display: none; /* Sembunyikan scrollbar di Chrome/Safari */
+}
+.wealth-line-tabs .tab {
+    position: relative;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 12px 14px;
+    font-weight: 700;
+    font-size: 14px;
+    flex: 1;
+    text-align: center;
+    white-space: nowrap;
+}
+.wealth-line-tabs .tab.active {
+    background: transparent;
+    color: var(--identity);
+}
+.wealth-line-tabs .tab.active::after {
+    content: "";
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    bottom: -1px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--identity);
+}
