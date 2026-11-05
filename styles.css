@@ -460,3 +460,12 @@ details.card[open] summary {
     text-align: center;
     white-space: nowrap;
 }
+
+/* Perbaikan Navigasi Bawah (Tanpa Tombol Plus) */
+#nav {
+    grid-template-columns: repeat(5, 1fr) !important;
+    justify-content: space-between;
+}
+
+/* Opsional: hapus display tombol plus jika masih tersisa */
+#nav .add { display: none !important; }
