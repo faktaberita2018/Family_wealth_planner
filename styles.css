@@ -423,3 +423,19 @@ html[data-theme=dark] .hero,html[data-theme=dark] .hero[style]{background:linear
     font-size: 11px; /* Ukuran teks label "Harga Beli" / "Buyback" */
     margin-bottom: 2px;
 }
+
+/* === REVISI FITUR RENCANA (Accordion & Layout) === */
+details.card summary::-webkit-details-marker { display: none; }
+details.card summary::after { 
+    content: '▼'; 
+    font-size: 10px; 
+    color: var(--muted); 
+    margin-left: 8px; 
+    transition: transform 0.2s;
+}
+details.card[open] summary::after { 
+    transform: rotate(180deg); 
+}
+details.card[open] summary { 
+    border-bottom: 1px solid var(--border); 
+}
