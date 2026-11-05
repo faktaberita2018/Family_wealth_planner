@@ -309,7 +309,7 @@ function planView(){
     </div>
 
     ${p?`
-        <!-- Hero Card (Alokasi, Sisa, Dana) -->
+        <!-- Hero Card -->
         <div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c); margin-top:15px; padding:20px;">
             <div class="eyebrow">TOTAL ALOKASI</div>
             <h1>${money(ps.alloc)}</h1>
@@ -355,88 +355,9 @@ function planView(){
     `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
 }
 
-    const categoryAccordions = Object.keys(groupedItems).sort().map(cat => {
-        const catItems = groupedItems[cat];
-        const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
-        
-        return `<details class="card accordion-card" style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
-            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); list-style:none;">
-                <span>${esc(cat)}</span>
-                <span style="font-size:14px; color:var(--identity);">${money(catTotal)}</span>
-            </summary>
-            <div style="padding: 0 16px;">
-                ${catItems.map(x=>`
-                    <div class="split" style="padding:12px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:nowrap;">
-                        <div style="flex:1; min-width:0;">
-                            <b style="font-size:14px; display:block; word-break:break-word;">${esc(x.name)}</b>
-                            <small class="muted">${x.fundingMode==='transfer'?'Transfer':'Penanda'}</small>
-                        </div>
-                        <div style="text-align:right; display:flex; align-items:center; gap:4px; flex-shrink:0;">
-                            <b style="font-size:14px; white-space:nowrap; margin-right:4px;">${money(x.amount)}</b>
-                            <select class="input" style="width:auto; min-height:28px; padding:4px 6px; font-size:11px; border-radius:var(--r-xs); background:transparent; border:1px solid var(--border); cursor:pointer;" onchange="changeItemStatus('${x.id}', this.value, this)">
-                                <option value="planned" ${x.fundingStatus==='planned'?'selected':''}>Rencana</option>
-                                <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
-                                <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
-                            </select>
-                            ${!isClosed?`<button class="icon" style="width:26px; height:26px; font-size:12px; margin-left:2px;" data-edit-item="${x.id}">✎</button><button class="icon" style="width:26px; height:26px; font-size:14px; color:var(--red);" data-remove-item="${x.id}">×</button>`:''}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        </details>`;
-    }).join('');
-
-    return `<div class="section">
-        <div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo.</span></div>
-        <button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button>
-    </div>
-    <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
-        <button class="icon" data-action="prevMonth">‹</button>
-        <div style="display:flex; align-items:center; gap:6px;">
-            <b>${p ? esc(p.name) : monthName(S.month)}</b>
-            ${p ? `<button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
-                   <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg); color:var(--red);" data-action="deletePlan" title="Hapus Rencana">🗑</button>` : ''}
-        </div>
-        <button class="icon" data-action="nextMonth">›</button>
-    </div>
-    ${p?`
-        <div class="grid two" style="margin-top:15px; gap:10px;">
-            <div class="card kpi" style="grid-column: 1 / -1; display:flex; flex-direction:row; justify-content:space-between; align-items:center; padding:14px;">
-                <div><span class="muted small">Pendapatan</span><br><b style="font-size:18px;">${money(ps.income)}</b></div>
-                <button class="btn ghost small" data-action="addIncome">＋ Income</button>
-            </div>
-            <div class="card kpi" style="padding:14px;">
-                <span class="muted small">Alokasi</span>
-                <b style="font-size:16px;">${money(ps.alloc)}</b>
-            </div>
-            <div class="card kpi" style="padding:14px;">
-                <span class="muted small">Sisa/Minus ${isClosed?'(Final)':''}</span>
-                <b class="${displaySurplus<0?'negative':'positive'}" style="font-size:16px;">${money(displaySurplus)}</b>
-            </div>
-            <div class="card kpi" style="grid-column: 1 / -1; padding:14px; background:var(--surface-2);">
-                <span class="muted small">Dana Disiapkan</span>
-                <b style="font-size:16px;">${money(ps.funded)}</b>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div><h2>Daftar alokasi</h2><span class="muted">Kelompokkan dan lipat sesuai kategori.</span></div>
-            <div class="row-actions">
-                <button class="btn ghost small" data-action="manageCategories">Kategori</button>
-                <button class="btn ghost small" data-action="copyPlan">Salin</button> 
-                ${isClosed ? `<span class="badge green" style="padding:8px 12px; font-size:13px;">✅ Ditutup</span>` : `<button class="btn dark small" data-action="closing">Tutup Bulan</button>`}
-            </div>
-        </div>
-        <div style="margin-top:10px;">
-            ${categoryAccordions || '<div class="card empty">Belum ada pos.</div>'}
-        </div>
-    `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
-}
-
-// FITUR BARU: Edit Status via Dropdown
 window.changeItemStatus = async function(id, newStatus, selectEl) {
     if (newStatus === 'funded') {
-        selectEl.value = 'planned'; // Revert visual segera
+        selectEl.value = 'planned'; 
         fundItem(id);
         return;
     }
