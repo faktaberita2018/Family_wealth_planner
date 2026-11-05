@@ -400,3 +400,26 @@ html[data-theme=dark] .hero,html[data-theme=dark] .hero[style]{background:linear
     margin-bottom: 15px;
 }
 .gm-controls select { max-width: 100%; }
+
+
+/* === REVISI: Harga Beli & Buyback Jadi Kiri-Kanan di HP === */
+.gm-prices {
+    grid-template-columns: 1fr 1fr !important; /* Paksa jadi 2 kolom */
+    gap: 6px; /* Jarak antar kotak */
+    margin: 10px 0;
+}
+
+.gm-prices > div {
+    padding: 8px; /* Kurangi padding agar ruang lebih lega */
+}
+
+.gm-prices b {
+    font-size: 14px; /* Sesuaikan ukuran font agar nominal Rp tidak terpotong */
+    word-break: break-word; /* Mencegah teks meluber keluar kotak jika terlalu panjang */
+    line-height: 1.3;
+}
+
+.gm-prices small {
+    font-size: 11px; /* Ukuran teks label "Harga Beli" / "Buyback" */
+    margin-bottom: 2px;
+}
