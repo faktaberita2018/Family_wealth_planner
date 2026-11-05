@@ -261,6 +261,14 @@ function planView(){
         });
     }
 
+    // Fungsi pembuat badge status
+    const makeBadge = (x) => {
+        let bg = x.fundingStatus === 'funded' ? 'var(--green-bg)' : x.fundingStatus === 'used' ? 'var(--surface-3)' : 'var(--orange-bg)';
+        let color = x.fundingStatus === 'funded' ? 'var(--green)' : x.fundingStatus === 'used' ? 'var(--muted)' : 'var(--orange)';
+        let text = x.fundingStatus === 'funded' ? '🟢 Dana Siap' : x.fundingStatus === 'used' ? '⚪ Terpakai' : '🟡 Rencana';
+        return `<button class="fund" style="background:${bg}; color:${color}; border:1px solid transparent; padding:6px 10px; border-radius:var(--r-xs); font-size:11px; font-weight:800; cursor:pointer; transition:transform 0.1s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'" data-cycle-status="${x.id}">${text}</button>`;
+    };
+
     const categoryAccordions = Object.keys(groupedItems).sort().map(cat => {
         const catItems = groupedItems[cat];
         const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
@@ -277,17 +285,13 @@ function planView(){
                         <!-- Kiri: Nama & Keterangan -->
                         <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
                             <b style="font-size:14px; display:block; word-break:break-word; line-height:1.3;">${esc(x.name)}</b>
-                            <small class="muted">${x.fundingMode==='transfer'?'Transfer':'Penanda'}</small>
+                            <small class="muted">${x.fundingMode==='transfer'?'💸 Saldo dipindah':'📝 Tanpa ubah saldo'}</small>
                         </div>
                         
-                        <!-- Tengah: Nominal & Dropdown -->
+                        <!-- Tengah: Nominal & Badge Status -->
                         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;">
                             <b style="font-size:14px; white-space:nowrap;">${money(x.amount)}</b>
-                            <select class="input" style="width:auto; min-height:28px; padding:4px 6px; font-size:11px; border-radius:var(--r-xs); background:transparent; border:1px solid var(--border); cursor:pointer;" onchange="changeItemStatus('${x.id}', this.value, this)">
-                                <option value="planned" ${x.fundingStatus==='planned'?'selected':''}>Rencana</option>
-                                <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
-                                <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
-                            </select>
+                            ${makeBadge(x)}
                         </div>
 
                         <!-- Kanan: Tombol Edit & Hapus (Atas Bawah) -->
@@ -354,7 +358,6 @@ function planView(){
                 <div><h2>Daftar alokasi</h2><span class="muted small">Kelompokkan dan lipat sesuai kategori.</span></div>
             </div>
             
-            <!-- Tombol Full Width (Grid 3 Kolom) -->
             <div class="action-bar-full">
                 <button class="btn primary" data-action="addPlanItem">＋ Pos</button>
                 <button class="btn ghost" data-action="manageCategories">Kategori</button>
@@ -366,7 +369,6 @@ function planView(){
             ${categoryAccordions || '<div class="card empty">Belum ada pos.</div>'}
         </div>
     `:`
-        <!-- Tampilan Jika Belum Ada Rencana -->
         <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-top:5px;">
             <button class="icon" data-action="prevMonth">‹</button>
             <b>${monthName(S.month)}</b>
@@ -381,17 +383,6 @@ function planView(){
     `}`
 }
 
-window.changeItemStatus = async function(id, newStatus, selectEl) {
-    if (newStatus === 'funded') {
-        selectEl.value = 'planned'; 
-        fundItem(id);
-        return;
-    }
-    let x = await FWPDB.get('planItems', id);
-    x.fundingStatus = newStatus;
-    await FWPDB.put('planItems', x);
-    await refresh();
-}
 
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
@@ -877,7 +868,24 @@ document.addEventListener('click',async e=>{
         FWPDB.put('settings', s).then(()=>{ refresh(); manageCategories(); });
         return;
     }
-    
+    // Menangani klik pada Badge Status
+    if(t.dataset.cycleStatus) {
+        let iid = t.dataset.cycleStatus;
+        let x = await FWPDB.get('planItems', iid);
+        
+        if (x.fundingStatus === 'planned') {
+            fundItem(iid); // Buka modal untuk pilih Transfer/Penanda
+        } else if (x.fundingStatus === 'funded') {
+            x.fundingStatus = 'used';
+            await FWPDB.put('planItems', x);
+            await refresh();
+        } else {
+            x.fundingStatus = 'planned';
+            await FWPDB.put('planItems', x);
+            await refresh();
+        }
+        return;
+    }
     if(t.dataset.delAsset){
         if(confirm('Hapus aset ini?')) { await FWPDB.del('assets', t.dataset.delAsset); await refresh(); }
     }
