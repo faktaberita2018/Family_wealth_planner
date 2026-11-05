@@ -385,7 +385,7 @@ function planView(){
 
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
-    <div class="tabs wealth-tabs">
+    <div class="tabs wealth-line-tabs">
         <button class="tab ${S.wealth==='accounts'?'active':''}" data-wealth="accounts">Rekening</button>
         <button class="tab ${S.wealth==='gold'?'active':''}" data-wealth="gold">Emas</button>
         <button class="tab ${S.wealth==='assets'?'active':''}" data-wealth="assets">Aset Tetap</button>
