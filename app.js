@@ -266,9 +266,9 @@ function planView(){
         const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
         
         return `<details class="card accordion-card" style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
-            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); list-style:none;">
-                <span>${esc(cat)}</span>
-                <span style="font-size:14px; color:var(--identity);">${money(catTotal)}</span>
+            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; align-items:center; background:var(--surface-2); list-style:none;">
+                <span style="flex:1; text-align:left; word-break:break-word;">${esc(cat)}</span>
+                <span style="font-size:14px; color:var(--identity); white-space:nowrap;">${money(catTotal)}</span>
             </summary>
             <div style="padding: 0 16px;">
                 ${catItems.map(x=>`
@@ -318,8 +318,8 @@ function planView(){
         <!-- Navigasi Bulan (Pindah ke bawah Hero) -->
         <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-top:15px;">
             <button class="icon" data-action="prevMonth">‹</button>
-            <b>${esc(p.name)}</b>
-            <div style="display:flex; gap:6px; align-items:center;">
+            <b style="text-align:center; flex:1; padding:0 10px;">${esc(p.name)}</b>
+            <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
                 <button class="icon" data-action="nextMonth">›</button>
                 <div style="width:1px; height:16px; background:var(--border); margin:0 2px;"></div>
                 <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
@@ -346,7 +346,7 @@ function planView(){
             <div class="action-bar-full">
                 <button class="btn primary" data-action="addPlanItem">＋ Pos</button>
                 <button class="btn ghost" data-action="manageCategories">Kategori</button>
-                ${isClosed ? `<span class="badge green" style="display:flex; align-items:center; justify-content:center; height:100%;">✅ Ditutup</span>` : `<button class="btn dark" data-action="closing">Tutup Bulan</button>`}
+                ${isClosed ? `<span class="badge green" style="display:flex; align-items:center; justify-content:center; height:100%; border-radius:var(--r-sm); padding:10px 4px;">✅ Ditutup</span>` : `<button class="btn dark" data-action="closing">Tutup Bulan</button>`}
             </div>
         </div>
         
