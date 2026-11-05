@@ -296,35 +296,35 @@ function planView(){
         <div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo.</span></div>
     </div>
     
-    <!-- Navigasi Bulan -->
-    <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
-        <button class="icon" data-action="prevMonth">‹</button>
-        <b>${p ? esc(p.name) : monthName(S.month)}</b>
-        <div style="display:flex; gap:6px; align-items:center;">
-            <button class="icon" data-action="nextMonth">›</button>
-            ${p ? `<div style="width:1px; height:16px; background:var(--border); margin:0 2px;"></div>
-                   <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
-                   <button class="icon" style="width:28px; height:28px; font-size:16px; background:var(--bg); color:var(--red);" data-action="deletePlan" title="Hapus Rencana">×</button>` : ''}
-        </div>
-    </div>
-
     ${p?`
-        <!-- Hero Card -->
-        <div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c); margin-top:15px; padding:20px;">
-            <div class="eyebrow">TOTAL ALOKASI</div>
-            <h1>${money(ps.alloc)}</h1>
+        <!-- Hero Card Lebih Ramping -->
+        <div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c); margin-top:5px; padding:16px;">
+            <div class="eyebrow" style="font-size:10px;">TOTAL ALOKASI</div>
+            <h1 style="margin:4px 0 12px; font-size:28px;">${money(ps.alloc)}</h1>
             
-            <div style="background:rgba(255,255,255,0.1); padding:12px; border-radius:12px; margin:15px 0; display:flex; align-items:center; gap:10px;">
-                <span style="font-size:24px">${displaySurplus<0?'⚠️':'💰'}</span>
+            <div style="background:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span style="font-size:20px">${displaySurplus<0?'⚠️':'💰'}</span>
                 <div>
-                    <small style="color:#c0c9c1;display:block">Sisa / Minus ${isClosed?'(Final)':''}</small>
-                    <b style="color:${displaySurplus<0?'#ff8a8a':'#c4f24a'}; font-size:18px;">${money(displaySurplus)}</b>
+                    <small style="color:#c0c9c1;display:block; font-size:11px;">Sisa / Minus ${isClosed?'(Final)':''}</small>
+                    <b style="color:${displaySurplus<0?'#ff8a8a':'#c4f24a'}; font-size:16px;">${money(displaySurplus)}</b>
                 </div>
             </div>
             
-            <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px; color:rgba(255,255,255,.88); margin:0;">
+            <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px; color:rgba(255,255,255,.88); margin:0;">
                 <span>📥 Dana Disiapkan: ${money(ps.funded)}</span>
             </p>
+        </div>
+
+        <!-- Navigasi Bulan (Pindah ke bawah Hero) -->
+        <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-top:15px;">
+            <button class="icon" data-action="prevMonth">‹</button>
+            <b>${esc(p.name)}</b>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <button class="icon" data-action="nextMonth">›</button>
+                <div style="width:1px; height:16px; background:var(--border); margin:0 2px;"></div>
+                <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
+                <button class="icon" style="width:28px; height:28px; font-size:16px; background:var(--bg); color:var(--red);" data-action="deletePlan" title="Hapus Rencana">×</button>
+            </div>
         </div>
         
         <!-- Pendapatan -->
@@ -341,18 +341,32 @@ function planView(){
             <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
                 <div><h2>Daftar alokasi</h2><span class="muted small">Kelompokkan dan lipat sesuai kategori.</span></div>
             </div>
-            <div class="row-actions" style="width:100%; justify-content:flex-start; overflow-x:auto; padding-bottom:4px; gap:6px;">
-                <button class="btn primary small" data-action="addPlanItem">＋ Pos</button>
-                <button class="btn ghost small" data-action="manageCategories">Kategori</button>
-                <button class="btn ghost small" data-action="copyPlan">Salin</button> 
-                ${isClosed ? `<span class="badge green" style="padding:6px 10px; font-size:13px;">✅ Ditutup</span>` : `<button class="btn dark small" data-action="closing">Tutup Bulan</button>`}
+            
+            <!-- Tombol Full Width (Grid 3 Kolom) -->
+            <div class="action-bar-full">
+                <button class="btn primary" data-action="addPlanItem">＋ Pos</button>
+                <button class="btn ghost" data-action="manageCategories">Kategori</button>
+                ${isClosed ? `<span class="badge green" style="display:flex; align-items:center; justify-content:center; height:100%;">✅ Ditutup</span>` : `<button class="btn dark" data-action="closing">Tutup Bulan</button>`}
             </div>
         </div>
         
         <div style="margin-top:10px;">
             ${categoryAccordions || '<div class="card empty">Belum ada pos.</div>'}
         </div>
-    `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
+    `:`
+        <!-- Tampilan Jika Belum Ada Rencana -->
+        <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-top:5px;">
+            <button class="icon" data-action="prevMonth">‹</button>
+            <b>${monthName(S.month)}</b>
+            <button class="icon" data-action="nextMonth">›</button>
+        </div>
+        <div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br>
+            <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
+                <button class="btn primary" data-action="newPlan">Buat rencana</button> 
+                <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button>
+            </div>
+        </div>
+    `}`
 }
 
 window.changeItemStatus = async function(id, newStatus, selectEl) {
