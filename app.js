@@ -265,7 +265,7 @@ function planView(){
         const catItems = groupedItems[cat];
         const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
         
-        return `<details class="card accordion-card" style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
+        return `<details class="card accordion-card" open style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
             <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; align-items:center; background:var(--surface-2); list-style:none;">
                 <span style="flex:1; text-align:left; word-break:break-word;">${esc(cat)}</span>
                 <span style="font-size:14px; color:var(--identity); white-space:nowrap;">${money(catTotal)}</span>
