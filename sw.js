@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fwp-1.4-aurora-midnight-v2';
+const CACHE_NAME = 'fwp-1.4-aurora-midnight-v5';
 const APP_SHELL = [
   './',
   './index.html',
