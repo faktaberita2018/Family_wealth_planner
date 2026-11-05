@@ -264,7 +264,7 @@ function planView(){
 
 function wealth(){
     return `<div class="section"><div><h2>Fondasi Kekayaan</h2><span class="muted">Tujuan hanyalah alokasi, bukan saldo virtual.</span></div></div>
-    <div class="tabs">
+    <div class="tabs wealth-tabs">
         <button class="tab ${S.wealth==='goals'?'active':''}" data-wealth="goals">Tujuan</button>
         <button class="tab ${S.wealth==='accounts'?'active':''}" data-wealth="accounts">Rekening</button>
         <button class="tab ${S.wealth==='gold'?'active':''}" data-wealth="gold">Emas</button>
@@ -354,7 +354,7 @@ function goldView(){
     const meta=GoldMarket.meta();
     const connection=meta?.lastFetchError?`🔴 Tidak dapat memeriksa harga terbaru. Cache terakhir tetap digunakan.<br><small>${esc(meta.lastFetchError)}</small>`:meta?.lastFetchSuccess?`Data harga diterima aplikasi: ${formatDateTime(meta.lastFetchSuccess)} WIB`:'Endpoint harga belum dihubungkan.';
     return `<div class="section"><div><h2>Aset Emas</h2><span class="muted small">${connection}</span></div><div class="row-actions"><button class="btn ghost" data-action="simulateGoldPurchase">🧮 Simulasi Beli</button> <button class="btn ghost" data-action="syncGoldMarket">🔄 Sinkronkan Harga</button></div></div>
-      <div class="tabs"><button class="tab ${S.goldTab==='digital'?'active':''}" data-goldtab="digital">Digital</button><button class="tab ${S.goldTab==='physical'?'active':''}" data-goldtab="physical">Fisik (LM)</button><button class="tab ${S.goldTab==='jewelry'?'active':''}" data-goldtab="jewelry">Perhiasan</button></div>
+      <div class="tabs gold-category-tabs"><button class="tab ${S.goldTab==='digital'?'active':''}" data-goldtab="digital">Digital</button><button class="tab ${S.goldTab==='physical'?'active':''}" data-goldtab="physical">Fisik (LM)</button><button class="tab ${S.goldTab==='jewelry'?'active':''}" data-goldtab="jewelry">Perhiasan</button></div>
       <button class="btn primary" style="width:100%;margin-top:15px" data-action="addGold">${title}</button><div class="grid ${S.goldTab==='physical'?'three':'two'}" style="margin-top:15px">${cards}</div>`;
 }
 function simulateGoldPurchase(){
