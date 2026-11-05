@@ -284,6 +284,100 @@ function planView(){
                                 <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
                                 <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
                             </select>
+                            ${!isClosed?`<button class="icon" style="width:26px; height:26px; font-size:12px; margin-left:2px;" data-edit-item="${x.id}">✎</button><button class="icon" style="width:26px; height:26px; font-size:16px; color:var(--red);" data-remove-item="${x.id}">×</button>`:''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </details>`;
+    }).join('');
+
+    return `<div class="section">
+        <div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo.</span></div>
+    </div>
+    
+    <!-- Navigasi Bulan -->
+    <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
+        <button class="icon" data-action="prevMonth">‹</button>
+        <b>${p ? esc(p.name) : monthName(S.month)}</b>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <button class="icon" data-action="nextMonth">›</button>
+            ${p ? `<div style="width:1px; height:16px; background:var(--border); margin:0 2px;"></div>
+                   <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
+                   <button class="icon" style="width:28px; height:28px; font-size:16px; background:var(--bg); color:var(--red);" data-action="deletePlan" title="Hapus Rencana">×</button>` : ''}
+        </div>
+    </div>
+
+    ${p?`
+        <!-- Hero Card (Alokasi, Sisa, Dana) -->
+        <div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c); margin-top:15px; padding:20px;">
+            <div class="eyebrow">TOTAL ALOKASI</div>
+            <h1>${money(ps.alloc)}</h1>
+            
+            <div style="background:rgba(255,255,255,0.1); padding:12px; border-radius:12px; margin:15px 0; display:flex; align-items:center; gap:10px;">
+                <span style="font-size:24px">${displaySurplus<0?'⚠️':'💰'}</span>
+                <div>
+                    <small style="color:#c0c9c1;display:block">Sisa / Minus ${isClosed?'(Final)':''}</small>
+                    <b style="color:${displaySurplus<0?'#ff8a8a':'#c4f24a'}; font-size:18px;">${money(displaySurplus)}</b>
+                </div>
+            </div>
+            
+            <p style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px; color:rgba(255,255,255,.88); margin:0;">
+                <span>📥 Dana Disiapkan: ${money(ps.funded)}</span>
+            </p>
+        </div>
+        
+        <!-- Pendapatan -->
+        <div class="card kpi" style="margin-top:15px; display:flex; flex-direction:row; justify-content:space-between; align-items:center; padding:14px;">
+            <div>
+                <span class="muted small">Pendapatan</span><br>
+                <b style="font-size:18px;">${money(ps.income)}</b>
+            </div>
+            <button class="btn ghost small" data-action="addIncome">＋ Income</button>
+        </div>
+        
+        <!-- Action Bar & Daftar Alokasi -->
+        <div class="section" style="margin-top:20px; margin-bottom:10px; align-items:center; flex-direction:column; gap:10px;">
+            <div style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+                <div><h2>Daftar alokasi</h2><span class="muted small">Kelompokkan dan lipat sesuai kategori.</span></div>
+            </div>
+            <div class="row-actions" style="width:100%; justify-content:flex-start; overflow-x:auto; padding-bottom:4px; gap:6px;">
+                <button class="btn primary small" data-action="addPlanItem">＋ Pos</button>
+                <button class="btn ghost small" data-action="manageCategories">Kategori</button>
+                <button class="btn ghost small" data-action="copyPlan">Salin</button> 
+                ${isClosed ? `<span class="badge green" style="padding:6px 10px; font-size:13px;">✅ Ditutup</span>` : `<button class="btn dark small" data-action="closing">Tutup Bulan</button>`}
+            </div>
+        </div>
+        
+        <div style="margin-top:10px;">
+            ${categoryAccordions || '<div class="card empty">Belum ada pos.</div>'}
+        </div>
+    `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
+}
+
+    const categoryAccordions = Object.keys(groupedItems).sort().map(cat => {
+        const catItems = groupedItems[cat];
+        const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
+        
+        return `<details class="card accordion-card" style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
+            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); list-style:none;">
+                <span>${esc(cat)}</span>
+                <span style="font-size:14px; color:var(--identity);">${money(catTotal)}</span>
+            </summary>
+            <div style="padding: 0 16px;">
+                ${catItems.map(x=>`
+                    <div class="split" style="padding:12px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:nowrap;">
+                        <div style="flex:1; min-width:0;">
+                            <b style="font-size:14px; display:block; word-break:break-word;">${esc(x.name)}</b>
+                            <small class="muted">${x.fundingMode==='transfer'?'Transfer':'Penanda'}</small>
+                        </div>
+                        <div style="text-align:right; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                            <b style="font-size:14px; white-space:nowrap; margin-right:4px;">${money(x.amount)}</b>
+                            <select class="input" style="width:auto; min-height:28px; padding:4px 6px; font-size:11px; border-radius:var(--r-xs); background:transparent; border:1px solid var(--border); cursor:pointer;" onchange="changeItemStatus('${x.id}', this.value, this)">
+                                <option value="planned" ${x.fundingStatus==='planned'?'selected':''}>Rencana</option>
+                                <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
+                                <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
+                            </select>
                             ${!isClosed?`<button class="icon" style="width:26px; height:26px; font-size:12px; margin-left:2px;" data-edit-item="${x.id}">✎</button><button class="icon" style="width:26px; height:26px; font-size:14px; color:var(--red);" data-remove-item="${x.id}">×</button>`:''}
                         </div>
                     </div>
