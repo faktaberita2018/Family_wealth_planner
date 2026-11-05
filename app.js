@@ -130,13 +130,21 @@ async function refresh(){
 }
 
 function setting(){
-    const def={id:'main',onboarded:false,budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,ownerName:'Kamu'};
+    const def={id:'main',onboarded:false,budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,ownerName:'Kamu',categories:['Pengeluaran Wajib', 'Living', 'Playing', 'Saving', 'Cicilan', 'Sosial / Zakat', 'Kebutuhan Anak', 'Sinking Fund', 'Lainnya']};
     return S.cache.settings.find(x=>x.id==='main')||def;
 }
+
+function getCategories() {
+    let s = setting();
+    if (!s.categories || !Array.isArray(s.categories) || s.categories.length === 0) {
+        s.categories = ['Pengeluaran Wajib', 'Living', 'Playing', 'Saving', 'Cicilan', 'Sosial / Zakat', 'Kebutuhan Anak', 'Sinking Fund', 'Lainnya'];
+        FWPDB.put('settings', s);
+    }
+    return s.categories;
+}
+
 function getGoldPrice(asset,purity=24,side='buyback'){
     let price=GoldMarket.priceFor(asset,side);
-    // Harga manual perhiasan sudah merupakan harga per gram sesuai kadar.
-    // Harga acuan Antam 24K baru dikalikan proporsi kadar.
     if(asset?.priceMode!=='manual'&&purity<24&&purity>0) price*=purity/24;
     return price;
 }
@@ -197,7 +205,6 @@ function goalValue(gid){
         }
         if(x.type==='gold_physical'){
             const asset=S.cache.goldPhysical.find(g=>g.id===x.sourceId);
-            // Alokasi fisik lama dapat berupa nominal; gunakan apa adanya bila bukan gram.
             return a+n(x.amount);
         }
         return a+n(x.amount);
@@ -245,21 +252,104 @@ function planView(){
     let p=plan(),ps=pstats(p),isClosed = p && p.status === 'closed', displaySurplus = ps.surplus;
     if(isClosed && p.closing) displaySurplus = p.closing.finalAmount;
 
-    return `<div class="section"><div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo rekening.</span></div><button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button></div>
-    <div class="monthbar"><button class="icon" data-action="prevMonth">‹</button><b>${monthName(S.month)}</b><button class="icon" data-action="nextMonth">›</button></div>
+    const groupedItems = {};
+    if(p) {
+        items(p.id).forEach(x => {
+            let cat = x.category || 'Lainnya';
+            if(!groupedItems[cat]) groupedItems[cat] = [];
+            groupedItems[cat].push(x);
+        });
+    }
+
+    const categoryAccordions = Object.keys(groupedItems).sort().map(cat => {
+        const catItems = groupedItems[cat];
+        const catTotal = catItems.reduce((a, b) => a + n(b.amount), 0);
+        
+        return `<details class="card accordion-card" style="margin-bottom:10px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
+            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); list-style:none;">
+                <span>${esc(cat)}</span>
+                <span style="font-size:14px; color:var(--identity);">${money(catTotal)}</span>
+            </summary>
+            <div style="padding: 0 16px;">
+                ${catItems.map(x=>`
+                    <div class="split" style="padding:12px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:nowrap;">
+                        <div style="flex:1; min-width:0;">
+                            <b style="font-size:14px; display:block; word-break:break-word;">${esc(x.name)}</b>
+                            <small class="muted">${x.fundingMode==='transfer'?'Transfer':'Penanda'}</small>
+                        </div>
+                        <div style="text-align:right; display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                            <b style="font-size:14px; white-space:nowrap; margin-right:4px;">${money(x.amount)}</b>
+                            <select class="input" style="width:auto; min-height:28px; padding:4px 6px; font-size:11px; border-radius:var(--r-xs); background:transparent; border:1px solid var(--border); cursor:pointer;" onchange="changeItemStatus('${x.id}', this.value, this)">
+                                <option value="planned" ${x.fundingStatus==='planned'?'selected':''}>Rencana</option>
+                                <option value="funded" ${x.fundingStatus==='funded'?'selected':''}>Dana Siap</option>
+                                <option value="used" ${x.fundingStatus==='used'?'selected':''}>Terpakai</option>
+                            </select>
+                            ${!isClosed?`<button class="icon" style="width:26px; height:26px; font-size:12px; margin-left:2px;" data-edit-item="${x.id}">✎</button><button class="icon" style="width:26px; height:26px; font-size:14px; color:var(--red);" data-remove-item="${x.id}">×</button>`:''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </details>`;
+    }).join('');
+
+    return `<div class="section">
+        <div><h2>Rencana Bulanan</h2><span class="muted">Rencana tidak otomatis mengubah saldo.</span></div>
+        <button class="btn primary" data-action="${p?'addPlanItem':'newPlan'}">＋ ${p?'Tambah pos':'Buat rencana'}</button>
+    </div>
+    <div class="monthbar" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px;">
+        <button class="icon" data-action="prevMonth">‹</button>
+        <div style="display:flex; align-items:center; gap:6px;">
+            <b>${p ? esc(p.name) : monthName(S.month)}</b>
+            ${p ? `<button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg);" data-action="editPlan" title="Edit Nama">✎</button>
+                   <button class="icon" style="width:28px; height:28px; font-size:14px; background:var(--bg); color:var(--red);" data-action="deletePlan" title="Hapus Rencana">🗑</button>` : ''}
+        </div>
+        <button class="icon" data-action="nextMonth">›</button>
+    </div>
     ${p?`
-        <div class="grid four" style="margin-top:15px">
-            <div class="card kpi"><span class="muted small">Pendapatan</span><b>${money(ps.income)}</b><button class="btn ghost" data-action="addIncome">＋ Income</button></div>
-            <div class="card kpi"><span class="muted small">Alokasi</span><b>${money(ps.alloc)}</b></div>
-            <div class="card kpi"><span class="muted small">Dana Disiapkan</span><b>${money(ps.funded)}</b></div>
-            <div class="card kpi"><span class="muted small">Sisa/Minus ${isClosed?'(Final)':''}</span><b class="${displaySurplus<0?'negative':'positive'}">${money(displaySurplus)}</b></div>
+        <div class="grid two" style="margin-top:15px; gap:10px;">
+            <div class="card kpi" style="grid-column: 1 / -1; display:flex; flex-direction:row; justify-content:space-between; align-items:center; padding:14px;">
+                <div><span class="muted small">Pendapatan</span><br><b style="font-size:18px;">${money(ps.income)}</b></div>
+                <button class="btn ghost small" data-action="addIncome">＋ Income</button>
+            </div>
+            <div class="card kpi" style="padding:14px;">
+                <span class="muted small">Alokasi</span>
+                <b style="font-size:16px;">${money(ps.alloc)}</b>
+            </div>
+            <div class="card kpi" style="padding:14px;">
+                <span class="muted small">Sisa/Minus ${isClosed?'(Final)':''}</span>
+                <b class="${displaySurplus<0?'negative':'positive'}" style="font-size:16px;">${money(displaySurplus)}</b>
+            </div>
+            <div class="card kpi" style="grid-column: 1 / -1; padding:14px; background:var(--surface-2);">
+                <span class="muted small">Dana Disiapkan</span>
+                <b style="font-size:16px;">${money(ps.funded)}</b>
+            </div>
         </div>
+        
         <div class="section">
-            <div><h2>Daftar alokasi</h2><span class="muted">Status funded dapat hanya penanda atau transfer.</span></div>
-            <div><button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button> ${isClosed ? `<span class="badge green" style="padding:10px 14px; font-size:14px;">✅ Bulan Ditutup</span>` : `<button class="btn dark" data-action="closing">Tutup Bulan</button>`}</div>
+            <div><h2>Daftar alokasi</h2><span class="muted">Kelompokkan dan lipat sesuai kategori.</span></div>
+            <div class="row-actions">
+                <button class="btn ghost small" data-action="manageCategories">Kategori</button>
+                <button class="btn ghost small" data-action="copyPlan">Salin</button> 
+                ${isClosed ? `<span class="badge green" style="padding:8px 12px; font-size:13px;">✅ Ditutup</span>` : `<button class="btn dark small" data-action="closing">Tutup Bulan</button>`}
+            </div>
         </div>
-        <div class="card">${items(p.id).length?items(p.id).map(x=>`<div class="split"><div><b>${esc(x.name)}</b><small class="muted">${esc(x.category)} · ${x.fundingMode==='transfer'?'Transfer saldo':'Penanda saja'}</small></div><div style="text-align:right"><b>${money(x.amount)}</b><br><button class="fund ${x.fundingStatus}" data-fund="${x.id}">${x.fundingStatus==='funded'?'Dana Disiapkan':'Direncanakan'}</button> ${!isClosed?`<button class="icon" data-remove-item="${x.id}">×</button>`:''}</div></div>`).join(''):'<div class="empty">Belum ada pos.</div>'}</div>
+        <div style="margin-top:10px;">
+            ${categoryAccordions || '<div class="card empty">Belum ada pos.</div>'}
+        </div>
     `:`<div class="card empty" style="margin-top:15px">Belum ada rencana ${monthName(S.month)}.<br><button class="btn primary" data-action="newPlan">Buat rencana</button> <button class="btn ghost" data-action="copyPlan">Salin bulan lalu</button></div>`}`
+}
+
+// FITUR BARU: Edit Status via Dropdown
+window.changeItemStatus = async function(id, newStatus, selectEl) {
+    if (newStatus === 'funded') {
+        selectEl.value = 'planned'; // Revert visual segera
+        fundItem(id);
+        return;
+    }
+    let x = await FWPDB.get('planItems', id);
+    x.fundingStatus = newStatus;
+    await FWPDB.put('planItems', x);
+    await refresh();
 }
 
 function wealth(){
@@ -373,7 +463,6 @@ async function syncGoldMarket(){
   catch(e){await refresh();toast('Gagal sync. Data terakhir tetap digunakan: '+e.message);}
 }
 
-// === FUNGSI UI LAINNYA ===// === FUNGSI UI LAINNYA ===
 function assetsView() {
     return `<div class="section"><div><h2>Aset Tetap</h2><span class="muted">Kendaraan, Properti, Elektronik.</span></div><button class="btn primary" data-action="addAsset">＋ Aset</button></div>
     <div class="grid three">${S.cache.assets.map(a=>`<div class="card"><div style="display:flex;justify-content:space-between"><span class="badge blue">${esc(a.category)}</span><span class="badge" style="font-size:10px">${esc(ownerName(a.ownerId) || 'Bersama')}</span></div><h3 style="margin:10px 0">${esc(a.name)}</h3><small class="muted">Beli: ${money(a.buyPrice)}</small><div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"><small class="muted">Nilai Saat Ini</small><b style="display:block;font-size:18px">${money(a.value)}</b></div><button class="btn red" style="margin-top:10px;width:100%" data-del-asset="${a.id}">Hapus</button></div>`).join('')||'<div class="card empty">Belum ada aset tetap.</div>'}</div>`
@@ -441,7 +530,7 @@ async function delOwner(oid) {
 
 async function seed(){
     let set=await FWPDB.get('settings','main');
-    if(!set) await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false});
+    if(!set) await FWPDB.put('settings',{id:'main',onboarded:false,ownerName:'Kamu',budgetMode:'simple',defaultClosing:'used',surplusBehavior:'ask',strictBalance:false,theme:'light',privacy:false,categories:['Pengeluaran Wajib', 'Living', 'Playing', 'Saving', 'Cicilan', 'Sosial / Zakat', 'Kebutuhan Anak', 'Sinking Fund', 'Lainnya']});
     let owners=await FWPDB.all('owners');
     if(owners.length===0){ for(let o of [{id:'ow_self',name:'Milik Sendiri',type:'individual'},{id:'ow_wife',name:'Istri',type:'individual'},{id:'ow_husband',name:'Suami',type:'individual'},{id:'ow_joint',name:'Bersama',type:'joint'}]) await FWPDB.put('owners',o); }
     let insts = await FWPDB.all('institutions');
@@ -563,8 +652,73 @@ async function allocateGoal(gid){
 }
 
 async function newPlan(){modal('Buat Rencana Bulanan',f('Nama rencana','x_name','text','Rencana '+monthName(S.month)),async()=>{await FWPDB.put('plans',{id:id('pl'),month:S.month,name:v('x_name'),status:'open',createdAt:dateNow()});closeModal();await refresh();toast('Rencana dibuat')})}
+
+async function editPlan() {
+    let p = plan(); if(!p) return;
+    modal('Edit Rencana', f('Nama rencana','x_name','text',p.name), async()=>{
+        p.name = v('x_name'); await FWPDB.put('plans', p); closeModal(); await refresh();
+    });
+}
+
+async function deletePlan() {
+    let p = plan(); if(!p) return;
+    if(!confirm(`Hapus rencana "${p.name}" beserta seluruh pos dan pendapatannya?`)) return;
+    await FWPDB.del('plans', p.id);
+    let ins = incomes(p.id); for(let x of ins) await FWPDB.del('incomeItems', x.id);
+    let its = items(p.id); for(let x of its) await FWPDB.del('planItems', x.id);
+    await refresh(); toast('Rencana dihapus');
+}
+
+async function manageCategories() {
+    let cats = getCategories();
+    let html = cats.map(c => `<div class="row" style="padding:8px 12px; display:flex; justify-content:space-between; align-items:center;"><div class="grow"><b>${esc(c)}</b></div><button class="icon" data-del-cat="${esc(c)}" style="color:var(--red); width:28px; height:28px;">×</button></div>`).join('');
+    modal('Kelola Kategori', `<div style="margin-bottom:16px; max-height:40vh; overflow-y:auto;">${html}</div>
+    <h3 style="margin-bottom:10px;">Tambah Kategori</h3>
+    <div class="formgrid">${f('Nama Kategori','x_new_cat')}</div>
+    `, async () => {
+        let val = v('x_new_cat').trim();
+        if (val && !cats.includes(val)) {
+            cats.push(val);
+            let s = setting(); s.categories = cats; await FWPDB.put('settings', s);
+        }
+        closeModal(); await refresh(); 
+    }, { saveLabel: 'Tambah' });
+}
+
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
-async function addPlanItem(){let p=plan();modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input"><option>Pengeluaran Wajib</option><option>Living</option><option>Playing</option><option>Saving</option><option>Cicilan</option><option>Sosial / Zakat</option><option>Kebutuhan Anak</option><option>Sinking Fund</option><option>Lainnya</option></select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});closeModal();await refresh()})}
+
+async function addPlanItem(){
+    let p=plan();
+    let cats = getCategories();
+    modal('Tambah Alokasi',`<div class="formgrid">${f('Nama pos','x_name')}${f('Nominal','x_amount','number')}<div class="field"><label>Kategori</label><select id="x_cat" class="input">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div><div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts()}</select></div></div>`,async()=>{
+        if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');
+        await FWPDB.put('planItems',{id:id('pi'),planId:p.id,name:v('x_name'),amount:n(v('x_amount')),category:v('x_cat'),sourceId:v('x_source'),fundingStatus:'planned',fundingMode:'marker',createdAt:dateNow()});
+        closeModal();await refresh()
+    });
+}
+
+async function editPlanItem(itemId) {
+    let x = await FWPDB.get('planItems', itemId);
+    if(!x) return;
+    let cats = getCategories();
+    const catOpts = cats.map(c=>`<option ${x.category===c?'selected':''}>${c}</option>`).join('');
+    const extraOpt = (x.category && !cats.includes(x.category)) ? `<option selected>${x.category}</option>` : '';
+    
+    modal('Edit Alokasi', `<div class="formgrid">
+        ${f('Nama pos','x_name','text',x.name)}
+        ${f('Nominal','x_amount','number',x.amount)}
+        <div class="field"><label>Kategori</label><select id="x_cat" class="input">${catOpts}${extraOpt}</select></div>
+        <div class="field"><label>Rekening sumber opsional</label><select id="x_source" class="input"><option value="">Belum dipilih</option>${sourceOpts(x.sourceId)}</select></div>
+    </div>`, async()=>{
+        if(!v('x_name')||!n(v('x_amount'))) return toast('Lengkapi data');
+        x.name = v('x_name'); 
+        x.amount = n(v('x_amount')); 
+        x.category = v('x_cat'); 
+        x.sourceId = v('x_source');
+        await FWPDB.put('planItems', x);
+        closeModal(); await refresh();
+    });
+}
 
 async function fundItem(iid){
     let x=await FWPDB.get('planItems', iid);
@@ -630,7 +784,7 @@ function shift(d){let x=new Date(S.month+'-01');x.setMonth(x.getMonth()+d);S.mon
 const actions={
     closeModal, quickAdd, newPlan, addIncome, addPlanItem, addGoal, addInstitution,
     transfer, closing, copyPlan, preferences, backup,
-    addGold, addAsset, addDebt,
+    addGold, addAsset, addDebt, editPlan, deletePlan, manageCategories,
     syncGoldMarket, simulateGoldPurchase,
     restore:()=>$('#restoreFile').click(),
     prevMonth:()=>shift(-1), nextMonth:()=>shift(1),
@@ -673,6 +827,15 @@ document.addEventListener('click',async e=>{
     if(t.dataset.sellGoldJewelry) return sellGoldJewelry(t.dataset.sellGoldJewelry);
     if(t.dataset.editOwner) return editOwner(t.dataset.editOwner);
     if(t.dataset.delOwner) return delOwner(t.dataset.delOwner);
+    if(t.dataset.editItem) return editPlanItem(t.dataset.editItem);
+    
+    if(t.dataset.delCat) {
+        let catName = t.dataset.delCat;
+        let s = setting();
+        s.categories = s.categories.filter(c => c !== catName);
+        FWPDB.put('settings', s).then(()=>{ refresh(); manageCategories(); });
+        return;
+    }
     
     if(t.dataset.delAsset){
         if(confirm('Hapus aset ini?')) { await FWPDB.del('assets', t.dataset.delAsset); await refresh(); }
