@@ -956,12 +956,29 @@ document.addEventListener('click',async e=>{
     if(t.closest('#onChoice')){$$('#onChoice button').forEach(x=>x.classList.remove('selected'));t.classList.add('selected')}
 });
 
-$('#restoreFile').addEventListener('change',e=>{
-    let file=e.target.files[0];if(!file)return;let r=new FileReader();
-    r.onload=async()=>{
-        try{await FWPDB.restore(JSON.parse(r.result));await refresh();toast('Backup dipulihkan')}catch{toast('Backup tidak valid')}
+$('#restoreFile').addEventListener('change', e => {
+    let file = e.target.files[0];
+    if(!file) return;
+
+    // Poin 1: Konfirmasi peringatan sebelum menghapus data lama
+    if(!confirm('⚠️ PERINGATAN!\n\nSeluruh data saat ini akan dihapus dan diganti dengan data dari file backup.\n\nApakah Anda yakin ingin melanjutkan?')) {
+        e.target.value = '';
+        return;
+    }
+
+    let r = new FileReader();
+    r.onload = async () => {
+        try {
+            await FWPDB.restore(JSON.parse(r.result));
+            await refresh();
+            toast('Backup berhasil dipulihkan');
+        } catch(err) {
+            // Menampilkan pesan error yang jelas (termasuk jika versi tidak cocok)
+            toast(err.message || 'Backup tidak valid');
+        }
     };
-    r.readAsText(file);e.target.value=''
+    r.readAsText(file);
+    e.target.value = '';
 });
 
 document.addEventListener('focusin', (e) => {
