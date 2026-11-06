@@ -49,15 +49,17 @@ function formatNum(x) {
 
 document.addEventListener('input', e => {
     const t = e.target;
-    if (t.matches('input[inputmode="numeric"], input[type="number"]')) {
+    // Menambahkan inputmode="decimal" agar formatter mengenali input desimal
+    if (t.matches('input[inputmode="numeric"], input[inputmode="decimal"], input[type="number"]')) {
         if (t.type === 'number') {
             t.type = 'text';
-            t.inputMode = 'numeric';
+            t.inputMode = 'decimal';
         }
         let raw = t.value.replace(/[^\d,]/g, ''); 
         let parts = raw.split(',');
         let intPart = parts[0];
-        let decPart = parts[1] ? ',' + parts[1] : '';
+        // Hanya izinkan 1 koma
+        let decPart = parts.length > 1 ? ',' + parts[1] : '';
         
         if (intPart) {
             t.value = new Intl.NumberFormat('id-ID').format(intPart) + decPart;
