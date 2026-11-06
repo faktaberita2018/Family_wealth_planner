@@ -511,3 +511,24 @@ details.card[open] summary {
     border-radius: 3px 3px 0 0;
     background: var(--identity);
 }
+/* Styling tambahan untuk tombol Plus/Minus di Kantong */
+button[data-topup-pocket], button[data-withdraw-pocket] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+}
+button[data-topup-pocket]:active, button[data-withdraw-pocket]:active {
+    transform: scale(0.9);
+}
+button[data-topup-pocket] {
+    background: var(--green-bg);
+    color: var(--green);
+}
+button[data-withdraw-pocket] {
+    background: var(--red-bg);
+    color: var(--red);
+}
