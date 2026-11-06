@@ -47,10 +47,9 @@ function formatNum(x) {
     return new Intl.NumberFormat('id-ID').format(raw);
 }
 
-// === FIX: FORMATTER ANGKA & DESIMAL ===
+// === FORMATTER ANGKA & DESIMAL ===
 document.addEventListener('input', e => {
     const t = e.target;
-    // Tambahkan inputmode="decimal" agar formatter mengenali input desimal
     if (t.matches('input[inputmode="numeric"], input[inputmode="decimal"], input[type="number"]')) {
         if (t.type === 'number') {
             t.type = 'text';
@@ -59,7 +58,6 @@ document.addEventListener('input', e => {
         let raw = t.value.replace(/[^\d,]/g, ''); 
         let parts = raw.split(',');
         let intPart = parts[0];
-        // Hanya izinkan 1 koma dan jangan hapus koma saat baru diketik
         let decPart = parts.length > 1 ? ',' + parts[1] : '';
         
         if (intPart) {
@@ -78,7 +76,6 @@ function toast(x){$('#toast').textContent=x;$('#toast').classList.add('show');se
 function money(x){return S.privacy?'Rp••••••':new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n(x))}
 function monthName(x){return new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric'}).format(new Date(x+'-01T00:00:00'))}
 
-// === FIX: GUNAKAN inputmode="decimal" DI FORM ===
 function f(label,id,type='text',value='',full=''){
     let extra = type === 'number' ? 'type="text" inputmode="decimal"' : `type="${type}"`;
     let fmtValue = type === 'number' ? formatNum(value) : value;
@@ -223,7 +220,6 @@ function home(){
     let runway = getRunway(), displaySurplus = ps.surplus;
     if(p && p.status==='closed' && p.closing) displaySurplus = p.closing.finalAmount;
 
-    // Fallback nilai 0 jika belum ada rencana
     let incAmount = p ? ps.income : 0;
     let allocAmount = p ? ps.alloc : 0;
     let fundedAmount = p ? ps.funded : 0;
@@ -244,7 +240,7 @@ function home(){
         </p>
     </div>
     
-    <!-- Judul Rencana dipindah ke sini -->
+    <!-- Judul Rencana -->
     <div class="section" style="margin-bottom:12px;">
         <div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Budgeting cerdas, tanpa jurnal harian.</span></div>
     </div>
@@ -282,7 +278,7 @@ function home(){
     
     ${!p ? `<div style="margin-top:12px;"><button class="btn primary" style="width:100%" data-action="newPlan">Buat Rencana Sekarang</button></div>` : ''}
 
-    <!-- Tujuan Prioritas ditaruh di bawah full width -->
+    <!-- Tujuan Prioritas -->
     <div class="section" style="margin-top:24px;">
         <div><h2>Tujuan Prioritas</h2><span class="muted">Gabungkan aset Anda untuk wujudkan tujuan.</span></div>
     </div>
@@ -344,7 +340,6 @@ function planView(){
             </summary>
             <div style="padding: 0 16px;">
                 ${catItems.map(x=>{
-                    // Menentukan teks sumber rekening
                     let sourceLabel = x.sourceId ? `🏦 ${esc(sourceName(x.sourceId))}` : '📝 Tanpa rekening';
                     
                     return `
@@ -495,6 +490,60 @@ function goalsView(){
     }).join('')||'<div class="card empty">Belum ada tujuan.</div>'}</div>`;
 }
 
+// === FITUR BARU: FUNGSI RIWAYAT KANTONG ===
+function showPocketHistory(pid) {
+    let p = pocket(pid);
+    if(!p) return;
+    // Filter ledger yang sourceId-nya adalah ID kantong ini
+    let history = S.cache.ledger.filter(x => x.meta && x.meta.sourceId === pid).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    
+    let rows = history.map(h => `
+        <div class="row" style="padding:10px 0; border-bottom:1px solid var(--border); background:transparent;">
+            <div class="grow">
+                <b style="font-size:13px;">${esc(h.label)}</b>
+                <small class="muted" style="display:block;">${new Date(h.createdAt).toLocaleString('id-ID')}</small>
+            </div>
+            <span class="amount ${n(h.amount)<0?'negative':'positive'}">${money(h.amount)}</span>
+        </div>
+    `).join('');
+    
+    if(!rows) rows = '<div class="empty" style="padding:20px 0;">Belum ada riwayat mutasi untuk kantong ini.</div>';
+    
+    modal(`Riwayat: ${esc(p.name)}`, `<div style="max-height:50vh; overflow-y:auto;">${rows}</div>`, null, {cancelLabel:'Tutup'});
+}
+
+// === FITUR BARU: FUNGSI TOP UP / TARIK LANGSUNG KANTONG ===
+async function transactPocket(pid, type) {
+    let p = await FWPDB.get('pockets', pid);
+    let a = await FWPDB.get('accounts', p.accountId);
+    let isIn = type === 'in';
+    let title = isIn ? 'Masukin Uang ke Kantong' : 'Tarik Uang dari Kantong';
+    
+    modal(title, `<p class="muted">${esc(p.name)} · Saldo saat ini: ${money(p.balance)}</p>${f('Nominal','x_amount','number','')}`, async () => {
+        let amount = n(v('x_amount'));
+        if(!amount || amount <= 0) return toast('Nominal tidak valid');
+        
+        if(!isIn) {
+            if(n(p.balance) - amount < 0) return toast('Saldo kantong tidak cukup');
+            if(n(a.balance) - amount < 0 && setting().strictBalance) return toast('Saldo rekening induk tidak cukup');
+        }
+        
+        let delta = isIn ? amount : -amount;
+        
+        // Update saldo kantong dan saldo rekening induk
+        p.balance = n(p.balance) + delta;
+        a.balance = n(a.balance) + delta;
+        
+        await FWPDB.put('pockets', p);
+        await FWPDB.put('accounts', a);
+        await ledger('balance', (isIn ? 'Top Up Kantong: ' : 'Tarik Kantong: ') + p.name, delta, {sourceId: p.id, accountId: a.id});
+        
+        closeModal();
+        await refresh();
+        toast(isIn ? 'Uang berhasil masuk' : 'Uang berhasil ditarik');
+    });
+}
+
 function accountsView(){
     return `<div class="section"><div><h2>Rekening & Kantong</h2><span class="muted">Saldo rekening induk tidak dijumlahkan lagi dengan kantong.</span></div><button class="btn primary" data-action="addInstitution">＋ Institusi</button></div>
     <div class="grid two">
@@ -520,7 +569,22 @@ function accountsView(){
                             </div>
                         </div>
                         ${ua<0?'<div class="warning small" style="margin-top:8px; padding:6px 10px;">Total kantong melebihi saldo rekening.</div>':''}
-                        ${pa.map(p=>`<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--border); margin-top:8px;"><div style="flex:1; min-width:0; padding-left:10px;"><b style="font-size:13px;">↳ ${esc(p.name)}</b></div><div style="display:flex; align-items:center; gap:6px;"><b style="font-size:13px; margin-right:4px;">${money(p.balance)}</b><button class="icon" style="width:24px; height:24px; font-size:12px;" data-edit-pocket="${p.id}" title="Edit Kantong">✎</button><button class="icon" style="width:24px; height:24px; font-size:12px; color:var(--red);" data-del-pocket="${p.id}" title="Hapus Kantong">×</button></div></div>`).join('')}
+                        
+                        <!-- FITUR BARU: TOMBOL PLUS/MINUS & RIWAYAT DI KANTONG -->
+                        ${pa.map(p=>`
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--border); margin-top:8px;">
+                            <div style="flex:1; min-width:0; padding-left:10px;">
+                                <b style="font-size:13px; cursor:pointer; text-decoration:underline; text-decoration-style:dotted;" data-history-pocket="${p.id}" title="Lihat Riwayat">↳ ${esc(p.name)}</b>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <b style="font-size:13px; margin-right:4px;">${money(p.balance)}</b>
+                                <button class="icon" style="width:24px; height:24px; font-size:14px; font-weight:bold; background:var(--green-bg); color:var(--green);" data-topup-pocket="${p.id}" title="Masukin Uang">+</button>
+                                <button class="icon" style="width:24px; height:24px; font-size:14px; font-weight:bold; background:var(--red-bg); color:var(--red);" data-withdraw-pocket="${p.id}" title="Tarik Uang">-</button>
+                                <button class="icon" style="width:24px; height:24px; font-size:12px; margin-left:2px;" data-edit-pocket="${p.id}" title="Edit Kantong">✎</button>
+                                <button class="icon" style="width:24px; height:24px; font-size:12px; color:var(--red);" data-del-pocket="${p.id}" title="Hapus Kantong">×</button>
+                            </div>
+                        </div>
+                        `).join('')}
                     </div>`;
                 }).join('') || '<div class="empty small">Belum ada rekening.</div>'}
             </div>
@@ -1000,6 +1064,11 @@ document.addEventListener('click',async e=>{
             g.status=v('x_status');await FWPDB.put('goals',g);closeModal();await refresh()
         })
     }
+    
+    // === FITUR BARU: TANGKAP KLIK TOMBOL KANTONG ===
+    if(t.dataset.historyPocket) return showPocketHistory(t.dataset.historyPocket);
+    if(t.dataset.topupPocket) return transactPocket(t.dataset.topupPocket, 'in');
+    if(t.dataset.withdrawPocket) return transactPocket(t.dataset.withdrawPocket, 'out');
     
     if(t.dataset.onNext){
         if($('#onChoice')){let sel=$('#onChoice .selected')?.dataset.v;if(t.dataset.onNext==='2')ON.budgetMode=sel;if(t.dataset.onNext==='3')ON.defaultClosing=sel}
