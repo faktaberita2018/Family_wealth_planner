@@ -33,10 +33,31 @@ const FWPDB={
         return x;
     },
     async restore(x){
-        if(!x?.data||!x.schemaVersion)throw Error('Backup tidak valid');
-        for(const s of this.stores){
-            await this.clear(s);
-            for(const row of(x.data[s]||[])) await this.put(s,row);
+        if(!x?.data || !x.schemaVersion) throw Error('Backup tidak valid');
+        if(Number(x.schemaVersion) !== this.version) {
+            throw Error(`Versi backup (v${x.schemaVersion}) tidak cocok dengan aplikasi saat ini (v${this.version}). Restore dibatalkan.`);
         }
+
+        return new Promise((ok, no) => {
+            // Membuka 1 transaksi untuk semua store sekaligus
+            const tx = this.db.transaction(this.stores, 'readwrite');
+            tx.oncomplete = () => ok();
+            tx.onerror = () => no(tx.error || new Error('Gagal menyimpan data ke database'));
+            tx.onabort = () => no(new Error('Transaksi database dibatalkan'));
+
+            for (const s of this.stores) {
+                const store = tx.objectStore(s);
+                store.clear(); // Hapus data lama
+                const rows = x.data[s] || [];
+                for (const row of rows) {
+                    store.put(row); // Masukkan data baru tanpa await (lebih cepat)
+                }
+            }
+        });
     }
 };
+
+
+
+
+
