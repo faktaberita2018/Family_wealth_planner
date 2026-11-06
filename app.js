@@ -299,13 +299,17 @@ function planView(){
                 <span style="font-size:14px; color:var(--identity); white-space:nowrap;">${money(catTotal)}</span>
             </summary>
             <div style="padding: 0 16px;">
-                ${catItems.map(x=>`
+                ${catItems.map(x=>{
+                    // Menentukan teks sumber rekening
+                    let sourceLabel = x.sourceId ? `🏦 ${esc(sourceName(x.sourceId))}` : '📝 Tanpa rekening';
+                    
+                    return `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); gap:10px;">
                         
-                        <!-- Kiri: Nama & Keterangan -->
+                        <!-- Kiri: Nama & Sumber Rekening -->
                         <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
                             <b style="font-size:14px; display:block; word-break:break-word; line-height:1.3;">${esc(x.name)}</b>
-                            <small class="muted">${x.fundingMode==='transfer'?'💸 Saldo dipindah':'📝 Tanpa ubah saldo'}</small>
+                            <small class="muted">${sourceLabel}</small>
                         </div>
                         
                         <!-- Tengah: Nominal & Badge Status -->
@@ -323,7 +327,7 @@ function planView(){
                         </div>
 
                     </div>
-                `).join('')}
+                `}).join('')}
             </div>
         </details>`;
     }).join('');
