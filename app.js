@@ -254,7 +254,7 @@ function home(){
         <div style="display: grid; grid-template-columns: 1fr 1fr;">
             <!-- Pendapatan -->
             <div style="padding: 16px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);">
-                <span class="muted small">Pendapatan Rencana</span>
+                <span class="muted small">Pendapatan Terencana</span>
                 <b style="display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere;">${money(incAmount)}</b>
             </div>
             
