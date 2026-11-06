@@ -246,7 +246,7 @@ function home(){
     
     <!-- Judul Rencana dipindah ke sini -->
     <div class="section" style="margin-bottom:12px;">
-        <div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Tidak wajib catat harian.</span></div>
+        <div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Budgeting cerdas, tanpa jurnal harian.</span></div>
     </div>
 
     <!-- Card 2x2 Terpadu -->
