@@ -223,6 +223,12 @@ function home(){
     let runway = getRunway(), displaySurplus = ps.surplus;
     if(p && p.status==='closed' && p.closing) displaySurplus = p.closing.finalAmount;
 
+    // Fallback nilai 0 jika belum ada rencana
+    let incAmount = p ? ps.income : 0;
+    let allocAmount = p ? ps.alloc : 0;
+    let fundedAmount = p ? ps.funded : 0;
+    let itemCount = p ? items(p.id).length : 0;
+
     return `<div class="hero" style="background:linear-gradient(135deg,#172019,#2a3d1c)">
         <div class="eyebrow">Total Kekayaan Bersih</div>
         <h1>${money(netWorth())}</h1>
@@ -237,13 +243,51 @@ function home(){
             <span>📉 Utang: ${money(totalUtang())}</span>
         </p>
     </div>
-    <div class="grid two" style="margin-top:15px">
-        <div class="card kpi"><span class="muted small">Pendapatan Rencana</span><b>${money(ps.income)}</b></div>
-        <div class="card kpi"><span class="muted small">Sisa/Minus ${p?.status==='closed'?'(Final)':''}</span><b class="${displaySurplus<0?'negative':'positive'}">${money(displaySurplus)}</b></div>
+    
+    <!-- Judul Rencana dipindah ke sini -->
+    <div class="section" style="margin-bottom:12px;">
+        <div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Tidak wajib catat harian.</span></div>
     </div>
-    <div class="grid two">
-        <div><div class="section"><div><h2>Rencana ${monthName(S.month)}</h2><span class="muted">Tidak wajib catat harian.</span></div></div>${p?`<div class="card"><div class="row"><div class="grow"><b>Total alokasi</b><small class="muted">${items(p.id).length} pos</small></div><b>${money(ps.alloc)}</b></div><div class="row"><div class="grow"><b>Dana disiapkan</b><small class="muted">Penanda atau transfer nyata</small></div><b>${money(ps.funded)}</b></div></div>`:`<div class="card empty">Belum ada rencana.<br><button class="btn primary" data-action="newPlan">Buat sekarang</button></div>`}</div>
-        <div><div class="section"><div><h2>Tujuan Prioritas</h2><span class="muted">Gabungkan aset Anda untuk wujudkan setiap tujuan.</span></div></div><div class="card">${g.length?g.map(goalRow).join(''):'<div class="empty">Belum ada tujuan.</div>'}</div></div>
+
+    <!-- Card 2x2 Terpadu -->
+    <div class="card" style="padding: 0; overflow: hidden; border: 1px solid var(--border);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr;">
+            <!-- Pendapatan -->
+            <div style="padding: 16px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);">
+                <span class="muted small">Pendapatan Rencana</span>
+                <b style="display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere;">${money(incAmount)}</b>
+            </div>
+            
+            <!-- Sisa / Minus -->
+            <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+                <span class="muted small">Sisa/Minus ${p?.status==='closed'?'(Final)':''}</span>
+                <b style="display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere;" class="${displaySurplus<0?'negative':'positive'}">${money(displaySurplus)}</b>
+            </div>
+            
+            <!-- Total Alokasi -->
+            <div style="padding: 16px; border-right: 1px solid var(--border);">
+                <span class="muted small">Total Alokasi</span>
+                <b style="display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere;">${money(allocAmount)}</b>
+                <small class="muted" style="font-size:11px;">${itemCount} pos</small>
+            </div>
+            
+            <!-- Dana Disiapkan -->
+            <div style="padding: 16px;">
+                <span class="muted small">Dana Disiapkan</span>
+                <b style="display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere;">${money(fundedAmount)}</b>
+                <small class="muted" style="font-size:11px;">Penanda / transfer</small>
+            </div>
+        </div>
+    </div>
+    
+    ${!p ? `<div style="margin-top:12px;"><button class="btn primary" style="width:100%" data-action="newPlan">Buat Rencana Sekarang</button></div>` : ''}
+
+    <!-- Tujuan Prioritas ditaruh di bawah full width -->
+    <div class="section" style="margin-top:24px;">
+        <div><h2>Tujuan Prioritas</h2><span class="muted">Gabungkan aset Anda untuk wujudkan tujuan.</span></div>
+    </div>
+    <div class="card">
+        ${g.length ? g.map(goalRow).join('') : '<div class="empty">Belum ada tujuan.</div>'}
     </div>`
 }
 
