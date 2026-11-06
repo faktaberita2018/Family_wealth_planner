@@ -261,6 +261,22 @@ function planView(){
         });
     }
 
+    // List Pendapatan
+    const incList = p ? incomes(p.id).map(inc => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); gap:10px;">
+            <div style="flex:1; min-width:0;">
+                <b style="font-size:14px; display:block; word-break:break-word;">${esc(inc.name)}</b>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                <b style="font-size:14px; white-space:nowrap;">${money(inc.amount)}</b>
+                ${!isClosed ? `
+                    <button class="icon" style="width:28px; height:28px; font-size:12px;" data-edit-income="${inc.id}">✎</button>
+                    <button class="icon" style="width:28px; height:28px; font-size:16px; color:var(--red);" data-del-income="${inc.id}">×</button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('') : '';
+
     // Fungsi pembuat badge status
     const makeBadge = (x) => {
         let bg = x.fundingStatus === 'funded' ? 'var(--green-bg)' : x.fundingStatus === 'used' ? 'var(--surface-3)' : 'var(--orange-bg)';
@@ -343,14 +359,19 @@ function planView(){
             </div>
         </div>
         
-        <!-- Pendapatan -->
-        <div class="card kpi" style="margin-top:15px; display:flex; flex-direction:row; justify-content:space-between; align-items:center; padding:14px;">
-            <div>
-                <span class="muted small">Pendapatan</span><br>
-                <b style="font-size:18px;">${money(ps.income)}</b>
+        <!-- Pendapatan (Accordion) -->
+        <details class="card accordion-card" style="margin-top:15px; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);">
+            <summary style="padding:14px 16px; font-weight:800; cursor:pointer; display:flex; align-items:center; background:var(--surface-2); list-style:none;">
+                <div style="flex:1; text-align:left;">
+                    <span class="muted small" style="font-weight:normal; display:block; margin-bottom:2px;">Pendapatan</span>
+                    <b style="font-size:18px;">${money(ps.income)}</b>
+                </div>
+                <button class="btn ghost small" data-action="addIncome" onclick="event.stopPropagation();" style="margin-right: 10px;">＋ Income</button>
+            </summary>
+            <div style="padding: 0 16px;">
+                ${incList || '<div class="empty small" style="padding: 14px 0;">Belum ada rincian pendapatan.</div>'}
             </div>
-            <button class="btn ghost small" data-action="addIncome">＋ Income</button>
-        </div>
+        </details>
         
         <!-- Action Bar & Daftar Alokasi -->
         <div class="section" style="margin-top:20px; margin-bottom:10px; align-items:center; flex-direction:column; gap:10px;">
@@ -717,6 +738,21 @@ async function manageCategories() {
 
 async function addIncome(){let p=plan();modal('Tambah Pendapatan',`<div class="formgrid">${f('Sumber','x_name','text','Gaji')}${f('Nominal','x_amount','number','')}</div>`,async()=>{if(!v('x_name')||!n(v('x_amount')))return toast('Lengkapi data');await FWPDB.put('incomeItems',{id:id('in'),planId:p.id,name:v('x_name'),amount:n(v('x_amount'))});await ledger('plan','Tambah pendapatan rencana',n(v('x_amount')),{planId:p.id},false);closeModal();await refresh()})}
 
+async function editIncome(iid) {
+    let x = await FWPDB.get('incomeItems', iid);
+    if(!x) return;
+    modal('Edit Pendapatan', `<div class="formgrid">
+        ${f('Sumber','x_name','text',x.name)}
+        ${f('Nominal','x_amount','number',x.amount)}
+    </div>`, async()=>{
+        if(!v('x_name')||!n(v('x_amount'))) return toast('Lengkapi data');
+        x.name = v('x_name');
+        x.amount = n(v('x_amount'));
+        await FWPDB.put('incomeItems', x);
+        closeModal(); await refresh();
+    });
+}
+
 async function addPlanItem(){
     let p=plan();
     let cats = getCategories();
@@ -856,7 +892,17 @@ document.addEventListener('click',async e=>{
     if(t.dataset.editOwner) return editOwner(t.dataset.editOwner);
     if(t.dataset.delOwner) return delOwner(t.dataset.delOwner);
     if(t.dataset.editItem) return editPlanItem(t.dataset.editItem);
+    if(t.dataset.editIncome) return editIncome(t.dataset.editIncome);
     
+    if(t.dataset.delIncome) {
+        if(confirm('Hapus rincian pendapatan ini?')) {
+            await FWPDB.del('incomeItems', t.dataset.delIncome);
+            await refresh();
+            toast('Pendapatan dihapus');
+        }
+        return;
+    }
+
     if(t.dataset.delCat) {
         let catName = t.dataset.delCat;
         let s = setting();
