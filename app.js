@@ -76,9 +76,10 @@ function money(x){return S.privacy?'Rp••••••':new Intl.NumberFormat(
 function monthName(x){return new Intl.DateTimeFormat('id-ID',{month:'long',year:'numeric'}).format(new Date(x+'-01T00:00:00'))}
 
 function f(label,id,type='text',value='',full=''){
-    let extra = type === 'number' ? 'type="text" inputmode="numeric"' : `type="${type}"`;
+    // Diubah menjadi decimal agar memunculkan tombol koma (,) di keyboard HP
+    let extra = type === 'number' ? 'type="text" inputmode="decimal"' : type="${type}";
     let fmtValue = type === 'number' ? formatNum(value) : value;
-    return `<div class="field ${full}"><label>${label}</label><input class="input" id="${id}" ${extra} value="${esc(fmtValue)}"></div>`
+    return <div class="field ${full}"><label>${label}</label><input class="input" id="${id}" ${extra} value="${esc(fmtValue)}"></div>
 }
 function v(id){return $('#'+id)?.value||''}
 
